@@ -6,17 +6,6 @@ import { CONFIG } from './config';
 type SF = s3tables.CfnTable.SchemaFieldProperty;
 
 const SCHEMAS: Record<string, SF[]> = {
-  customers: [
-    { name: 'customer_id', type: 'int', required: true },
-    { name: 'first_name', type: 'string' },
-    { name: 'last_name', type: 'string' },
-    { name: 'email', type: 'string' },
-    { name: 'phone', type: 'string' },
-    { name: 'registration_date', type: 'string' },
-    { name: 'customer_tier', type: 'string' },
-    { name: 'created_at', type: 'timestamp' },
-    { name: 'updated_at', type: 'timestamp' },
-  ],
   orders: [
     { name: 'order_id', type: 'int', required: true },
     { name: 'customer_id', type: 'int' },

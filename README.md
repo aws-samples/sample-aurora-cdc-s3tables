@@ -22,7 +22,7 @@ The pipeline consists of six components working together:
 
 1. **Aurora PostgreSQL** — Source database with logical replication enabled. Debezium reads the WAL (Write-Ahead Log) to capture row-level changes without impacting database performance.
 
-2. **Debezium on MSK Connect** — An open-source CDC connector running as a managed MSK Connect worker. It captures changes from three tables (`customers`, `orders`, `products`) and uses the `ByLogicalTableRouter` SMT to route all events to a single Kafka topic (`aurora.cdc.all-tables`).
+2. **Debezium on MSK Connect** — An open-source CDC connector running as a managed MSK Connect worker. It captures changes from two tables (`orders`, `products`) and uses the `ByLogicalTableRouter` SMT to route all events to a single Kafka topic (`aurora.cdc.all-tables`).
 
 3. **Amazon MSK** — Kafka cluster with dual authentication (IAM for Firehose, unauthenticated for Debezium) and VPC connectivity enabled for Firehose PrivateLink access.
 
@@ -51,18 +51,6 @@ Before deploying the pipeline, configure your Aurora database for CDC:
 
 ```sql
 -- Create the tables
-CREATE TABLE public.customers (
-    customer_id SERIAL PRIMARY KEY,
-    first_name VARCHAR(100),
-    last_name VARCHAR(100),
-    email VARCHAR(255),
-    phone VARCHAR(50),
-    registration_date VARCHAR(50),
-    customer_tier VARCHAR(20),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
 CREATE TABLE public.orders (
     order_id SERIAL PRIMARY KEY,
     customer_id INTEGER,
@@ -85,7 +73,7 @@ CREATE TABLE public.products (
 
 -- Create replication slot and publication for Debezium
 SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
-CREATE PUBLICATION dbz_publication FOR TABLE public.customers, public.orders, public.products;
+CREATE PUBLICATION dbz_publication FOR TABLE public.orders, public.products;
 ```
 
 ## Deployment
@@ -121,8 +109,8 @@ export const CONFIG = {
   // S3 Tables
   s3TablesBucketName: '<your-table-bucket-name>',
   s3TablesNamespace: 'aurora_cdc',
-  tables: ['customers', 'orders', 'products'],
-  tableKeys: { customers: 'customer_id', orders: 'order_id', products: 'product_id' },
+  tables: ['orders', 'products'],
+  tableKeys: { orders: 'order_id', products: 'product_id' },
 
   // Firehose
   firehoseBackupBucket: '<your-backup-bucket-name>',
@@ -132,7 +120,7 @@ export const CONFIG = {
   debeziumWorkerConfigArn: '',
   debeziumPluginBucket: '<your-plugin-bucket-name>',
   debeziumTopicPrefix: 'aurora.cdc',
-  debeziumTables: 'public.customers,public.orders,public.products',
+  debeziumTables: 'public.orders,public.products',
 };
 ```
 
@@ -187,7 +175,7 @@ This deploys 8 stacks in dependency order:
 | `CdcMskCluster` | MSK cluster with IAM auth, VPC connectivity, auto.create.topics config, security groups |
 | `CdcMskConnectIam` | MSK Connect service role, plugin S3 bucket, connector CloudWatch log group |
 | `CdcDebeziumConnector` | Debezium connector with SMT reroute to single topic |
-| `CdcS3Tables` | S3 table bucket, namespace, 3 Iceberg tables with schemas |
+| `CdcS3Tables` | S3 table bucket, namespace, 2 Iceberg tables with schemas |
 | `CdcLambdaTransform` | Lambda function for CDC event transformation and routing |
 | `CdcFirehoseRole` | Firehose IAM role with MSK, S3 Tables, Glue, Lake Formation, VPC permissions |
 | `CdcLakeFormation` | Lake Formation permissions for Firehose role + MSK cluster resource policy |
@@ -215,8 +203,8 @@ The Lambda function converts Debezium's envelope format:
 {
   "op": "c",
   "before": null,
-  "after": {"customer_id": 1, "first_name": "Jane", "email": "jane@example.com"},
-  "source": {"table": "customers", "db": "cdcdemo", ...}
+  "after": {"order_id": 1, "customer_id": 1, "total_amount": 299.99},
+  "source": {"table": "orders", "db": "cdcdemo", ...}
 }
 ```
 
@@ -225,11 +213,11 @@ Into a flattened record with routing metadata:
 ```json
 // Transformed output with otfMetadata
 {
-  "data": {"customer_id": 1, "first_name": "Jane", "email": "jane@example.com"},
+  "data": {"order_id": 1, "customer_id": 1, "total_amount": 299.99},
   "metadata": {
     "otfMetadata": {
       "destinationDatabaseName": "aurora_cdc",
-      "destinationTableName": "customers",
+      "destinationTableName": "orders",
       "operation": "insert"
     }
   }
@@ -253,9 +241,6 @@ Insert test data into Aurora and verify it appears in S3 Tables:
 
 ```sql
 -- Insert test records
-INSERT INTO public.customers (first_name, last_name, email, phone, registration_date, customer_tier)
-VALUES ('Jane', 'Doe', 'jane@example.com', '555-0100', '2026-01-15', 'gold');
-
 INSERT INTO public.orders (customer_id, order_date, total_amount, status)
 VALUES (1, '2026-01-20', 299.99, 'shipped');
 
@@ -276,7 +261,7 @@ aws cloudwatch get-metric-statistics \
   --period 60 --statistics Sum
 
 # Query S3 Tables via Athena (after registering the catalog)
-SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."customers";
+SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders";
 ```
 
 ## Project Structure

@@ -34,13 +34,13 @@ export const CONFIG = {
   debeziumWorkerConfigArn: 'arn:aws:kafkaconnect:us-east-1:063337766236:worker-configuration/debezium-worker-config/60c6a306-91aa-4d93-8bd2-275bc9a3d49a-4',
   debeziumPluginBucket: 'msk-connect-plugins-063337766236-us-east-1',
   debeziumTopicPrefix: 'aurora.cdc',
-  debeziumTables: 'public.customers,public.orders,public.products',
+  debeziumTables: 'public.orders,public.products',
 
   // S3 Tables
   s3TablesBucketName: 'aurora-cdc-table-bucket-063337766236-us-east-1',
   s3TablesNamespace: 'aurora_cdc',
-  tables: ['customers', 'orders', 'products'] as const,
-  tableKeys: { customers: 'customer_id', orders: 'order_id', products: 'product_id' } as Record<string, string>,
+  tables: ['orders', 'products'] as const,
+  tableKeys: { orders: 'order_id', products: 'product_id' } as Record<string, string>,
 
   // Firehose
   firehoseBackupBucket: 'firehose-backup-063337766236-us-east-1',
