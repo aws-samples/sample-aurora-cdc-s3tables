@@ -98,6 +98,10 @@ Resources:
             VolumeSize: 100
       EncryptionInfo:
         EncryptionInTransit:
+          # TLS_PLAINTEXT is required: Debezium MSK Connect workers use PLAINTEXT protocol
+          # (MSK Connect does not support IAM auth for connector-to-broker communication).
+          # Firehose connects via IAM over TLS through the VPC connectivity endpoint.
+          # InCluster: true ensures inter-broker traffic is always encrypted.
           ClientBroker: TLS_PLAINTEXT
           InCluster: true
       ClientAuthentication:
