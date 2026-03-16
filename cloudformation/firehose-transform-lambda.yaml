@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda function to transform Debezium CDC events for Firehose to S3 Tables'
+
+Resources:
+  TransformLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  TransformLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: firehose-debezium-transform
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt TransformLambdaRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Code:
+        ZipFile: |
+          import json
+          import base64
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def lambda_handler(event, context):
+              """
+              Transform Debezium CDC events from MSK to Iceberg-compatible format for Firehose
+              """
+              output = []
+              
+              for record in event['records']:
+                  try:
+                      # Decode the Kafka message
+                      payload = base64.b64decode(record['data']).decode('utf-8')
+                      cdc_event = json.loads(payload)
+                      
+                      # Extract operation type
+                      op = cdc_event.get('op', 'c')
+                      
+                      # Map Debezium operations to Iceberg operations
+                      operation_map = {
+                          'c': 'INSERT',  # create
+                          'u': 'UPDATE',  # update
+                          'd': 'DELETE',  # delete
+                          'r': 'INSERT'   # read (snapshot)
+                      }
+                      
+                      operation = operation_map.get(op, 'INSERT')
+                      
+                      # For DELETE, use 'before' payload, otherwise use 'after'
+                      if op == 'd':
+                          data = cdc_event.get('before', {})
+                      else:
+                          data = cdc_event.get('after', {})
+                      
+                      # Skip if no data
+                      if not data:
+                          logger.warning(f"Skipping record with no data")
+                          output.append({
+                              'recordId': record['recordId'],
+                              'result': 'Dropped',
+                              'data': record['data']
+                          })
+                          continue
+                      
+                      # Create Iceberg-compatible record
+                      iceberg_record = {
+                          'Data': data,
+                          'Metadata': {
+                              'operation': operation
+                          }
+                      }
+                      
+                      # Encode the transformed record
+                      output_data = json.dumps(iceberg_record) + '\n'
+                      encoded_data = base64.b64encode(output_data.encode('utf-8')).decode('utf-8')
+                      
+                      output.append({
+                          'recordId': record['recordId'],
+                          'result': 'Ok',
+                          'data': encoded_data
+                      })
+                      
+                  except Exception as e:
+                      logger.error(f"Error processing record: {str(e)}")
+                      output.append({
+                          'recordId': record['recordId'],
+                          'result': 'ProcessingFailed',
+                          'data': record['data']
+                      })
+              
+              logger.info(f"Processed {len(output)} records")
+              return {'records': output}
+
+  TransformLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${TransformLambdaFunction}'
+      RetentionInDays: 7
+
+Outputs:
+  TransformLambdaArn:
+    Description: Lambda function ARN for Firehose transformation
+    Value: !GetAtt TransformLambdaFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaArn'
+  
+  TransformLambdaName:
+    Description: Lambda function name
+    Value: !Ref TransformLambdaFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaName'

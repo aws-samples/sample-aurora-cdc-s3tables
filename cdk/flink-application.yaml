@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09' Description: 'Flink application for Aurora CDC to S3 Tables'
+
+Parameters:
+  ApplicationJarS3Bucket:
+    Type: String
+    Description: S3 bucket containing Flink application JAR
+  
+  ApplicationJarS3Key:
+    Type: String
+    Default: flink/aurora-cdc-s3tables.jar
+    Description: S3 key for Flink application JAR
+  
+  MSKBootstrapServers:
+    Type: String
+    Description: MSK bootstrap servers (comma-separated)
+  
+  KafkaTopic:
+    Type: String
+    Default: aurora.cdc.public.customers
+    Description: Kafka topic to consume from
+  
+  TableBucketArn:
+    Type: String
+    Description: S3 Tables Bucket ARN
+  
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: Subnet IDs for Flink application
+  
+  SecurityGroupId:
+    Type: String
+    Description: Security group ID for MSK access
+
+Resources:
+  FlinkExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: flink-cdc-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: kinesisanalytics.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FlinkS3TablesPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub 'arn:aws:s3:::${ApplicationJarS3Bucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3tables:PutTableData
+                  - s3tables:GetTable
+                  - s3tables:GetTableMetadata
+                  - s3tables:UpdateTableMetadata
+                Resource: !Sub '${TableBucketArn}/*'
+              - Effect: Allow
+                Action:
+                  - kafka:GetBootstrapBrokers
+                  - kafka:DescribeCluster
+                  - kafka:DescribeClusterV2
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+
+  FlinkApplication:
+    Type: AWS::KinesisAnalyticsV2::Application
+    Properties:
+      ApplicationName: aurora-cdc-to-s3tables
+      RuntimeEnvironment: FLINK-1_18
+      ServiceExecutionRole: !GetAtt FlinkExecutionRole.Arn
+      ApplicationConfiguration:
+        ApplicationCodeConfiguration:
+          CodeContent:
+            S3ContentLocation:
+              BucketARN: !Sub 'arn:aws:s3:::${ApplicationJarS3Bucket}'
+              FileKey: !Ref ApplicationJarS3Key
+          CodeContentType: ZIPFILE
+        EnvironmentProperties:
+          PropertyGroups:
+            - PropertyGroupId: ProducerConfigProperties
+              PropertyMap:
+                KAFKA_BOOTSTRAP_SERVERS: !Ref MSKBootstrapServers
+                KAFKA_TOPIC: !Ref KafkaTopic
+                S3_TABLES_BUCKET_ARN: !Ref TableBucketArn
+                S3_TABLES_NAMESPACE: aurora_cdc
+                S3_TABLES_TABLE: customers
+        FlinkApplicationConfiguration:
+          CheckpointConfiguration:
+            ConfigurationType: DEFAULT
+          MonitoringConfiguration:
+            ConfigurationType: CUSTOM
+            MetricsLevel: APPLICATION
+            LogLevel: INFO
+          ParallelismConfiguration:
+            ConfigurationType: CUSTOM
+            Parallelism: 2
+            ParallelismPerKPU: 1
+            AutoScalingEnabled: true
+        VpcConfigurations:
+          - SecurityGroupIds:
+              - !Ref SecurityGroupId
+            SubnetIds: !Ref SubnetIds
+
+  FlinkLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/kinesis-analytics/aurora-cdc-to-s3tables
+      RetentionInDays: 7
+
+  FlinkLogStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName: !Ref FlinkLogGroup
+      LogStreamName: kinesis-analytics-log-stream
+
+Outputs:
+  ApplicationArn:
+    Description: Flink application ARN
+    Value: !Sub 'arn:aws:kinesisanalytics:${AWS::Region}:${AWS::AccountId}:application/${FlinkApplication}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApplicationArn'
+
+  FlinkRoleArn:
+    Description: Flink execution role ARN
+    Value: !GetAtt FlinkExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FlinkRoleArn'

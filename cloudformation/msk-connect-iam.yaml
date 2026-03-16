@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IAM roles and S3 bucket for MSK Connect with Debezium'
+
+Resources:
+  MSKConnectPluginBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub msk-connect-plugins-${AWS::AccountId}-${AWS::Region}
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Purpose
+          Value: msk-connect-debezium-plugins
+
+  MSKConnectServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: msk-connect-service-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: kafkaconnect.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: MSKConnectS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt MSKConnectPluginBucket.Arn
+                  - !Sub ${MSKConnectPluginBucket.Arn}/*
+        - PolicyName: MSKConnectKafkaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kafka-cluster:Connect
+                  - kafka-cluster:AlterCluster
+                  - kafka-cluster:DescribeCluster
+                  - kafka-cluster:WriteData
+                  - kafka-cluster:ReadData
+                  - kafka-cluster:CreateTopic
+                  - kafka-cluster:DescribeTopic
+                  - kafka-cluster:AlterTopic
+                Resource: '*'
+        - PolicyName: MSKConnectSecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Ref AuroraCredentialsSecret
+        - PolicyName: MSKConnectEC2Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeVpcs
+                Resource: '*'
+
+  AuroraCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: aurora-cdc-credentials
+      Description: Aurora PostgreSQL credentials for Debezium
+      SecretString: !Sub |
+        {
+          "username": "dbadmin",
+          "password": "Rb7-MotibaghDelhi2026",
+          "host": "aurora-cdc-rds-auroracluster-l1vzx1j2gxdb.cluster-crkeeemtkh5z.us-east-1.rds.amazonaws.com",
+          "port": 5432,
+          "dbname": "cdcdemo"
+        }
+
+Outputs:
+  MSKConnectPluginBucketName:
+    Description: S3 bucket for MSK Connect plugins
+    Value: !Ref MSKConnectPluginBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-PluginBucket
+  
+  MSKConnectServiceRoleArn:
+    Description: IAM role ARN for MSK Connect
+    Value: !GetAtt MSKConnectServiceRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-ServiceRoleArn
+  
+  AuroraCredentialsSecretArn:
+    Description: Secrets Manager ARN for Aurora credentials
+    Value: !Ref AuroraCredentialsSecret
+    Export:
+      Name: !Sub ${AWS::StackName}-SecretArn

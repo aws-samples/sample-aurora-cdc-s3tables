@@ -1,0 +1,28 @@
+# Blog/proposal docs (not for public repo)
+aurora-cdc-s3tables-architecture.drawio
+aurora-cdc-s3tables-architecture.drawio
+aurora-cdc-s3tables-architecture.png
+Blog Post Proposal Template.docx
+Blog_Proposal_Debezium_MSK_S3Tables.md
+blog-draft.md
+DEPLOYMENT_HISTORY.md
+Stream Aurora to S3Tables Proposal.docx
+
+# CDK
+cdk/cdk.out/
+cdk/node_modules/
+
+# Generated
+generated-diagrams/
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
+*.js
+*.d.ts
+!jest.config.js
+
+# Worklog
+worklog.log

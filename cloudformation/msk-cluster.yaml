@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon MSK cluster for Aurora CDC with Debezium'
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-06d31004a0ac2b8de
+    Description: VPC ID where MSK cluster will be deployed
+  
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Default: subnet-0215dd02b9e3edbde,subnet-0ad591a7a23c94b6c
+    Description: Subnet IDs for MSK brokers (minimum 2 AZs)
+  
+  AuroraSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-06df333226cad343e
+    Description: Aurora cluster security group for MSK access
+  
+  KafkaVersion:
+    Type: String
+    Default: 3.7.x
+    AllowedValues: [3.7.x, 3.6.0, 3.5.1]
+    Description: Kafka version
+  
+  BrokerInstanceType:
+    Type: String
+    Default: kafka.m5.large
+    AllowedValues: [kafka.m5.large, kafka.m5.xlarge, kafka.m5.2xlarge]
+    Description: MSK broker instance type
+
+Resources:
+  MSKSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: msk-aurora-cdc-sg
+      GroupDescription: Security group for MSK cluster
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9092
+          ToPort: 9092
+          SourceSecurityGroupId: !Ref AuroraSecurityGroup
+          Description: Kafka plaintext from Aurora SG
+        - IpProtocol: tcp
+          FromPort: 9094
+          ToPort: 9094
+          SourceSecurityGroupId: !Ref AuroraSecurityGroup
+          Description: Kafka TLS from Aurora SG
+        - IpProtocol: tcp
+          FromPort: 2181
+          ToPort: 2181
+          SourceSecurityGroupId: !Ref AuroraSecurityGroup
+          Description: Zookeeper from Aurora SG
+      Tags:
+        - Key: Name
+          Value: msk-aurora-cdc-sg
+
+  MSKSecurityGroupSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref MSKSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9092
+      ToPort: 9092
+      SourceSecurityGroupId: !Ref MSKSecurityGroup
+      Description: Self-referencing rule for MSK Connect workers
+
+  AuroraSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AuroraSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref MSKSecurityGroup
+      Description: Allow MSK Connect workers to access Aurora
+
+  MSKClusterLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/msk/aurora-cdc-cluster
+      RetentionInDays: 7
+
+  MSKCluster:
+    Type: AWS::MSK::Cluster
+    Properties:
+      ClusterName: aurora-cdc-cluster
+      KafkaVersion: !Ref KafkaVersion
+      NumberOfBrokerNodes: 2
+      BrokerNodeGroupInfo:
+        InstanceType: !Ref BrokerInstanceType
+        ClientSubnets: !Ref SubnetIds
+        SecurityGroups:
+          - !Ref MSKSecurityGroup
+        StorageInfo:
+          EBSStorageInfo:
+            VolumeSize: 100
+      EncryptionInfo:
+        EncryptionInTransit:
+          ClientBroker: TLS_PLAINTEXT
+          InCluster: true
+      ClientAuthentication:
+        Unauthenticated:
+          Enabled: true
+      LoggingInfo:
+        BrokerLogs:
+          CloudWatchLogs:
+            Enabled: true
+            LogGroup: !Ref MSKClusterLogGroup
+      Tags:
+        Project: aurora-cdc-s3tables
+        Purpose: debezium-cdc
+
+Outputs:
+  MSKClusterArn:
+    Description: MSK cluster ARN
+    Value: !Ref MSKCluster
+    Export:
+      Name: !Sub ${AWS::StackName}-ClusterArn
+  
+  MSKSecurityGroupId:
+    Description: MSK security group ID
+    Value: !Ref MSKSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-SecurityGroupId
+  
+  MSKBootstrapServers:
+    Description: MSK bootstrap servers (retrieve after creation)
+    Value: !Sub |
+      Run: aws kafka get-bootstrap-brokers --cluster-arn ${MSKCluster} --region ${AWS::Region}
