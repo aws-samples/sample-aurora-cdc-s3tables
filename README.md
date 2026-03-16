@@ -2,7 +2,13 @@
 
 ## Overview
 
-This solution implements a real-time Change Data Capture (CDC) pipeline that streams row-level changes from Amazon Aurora PostgreSQL to Amazon S3 Tables as Apache Iceberg tables. The pipeline captures inserts, updates, and deletes from multiple source tables and delivers them through a single streaming path using Debezium, Amazon MSK, and Amazon Data Firehose.
+Organizations running transactional workloads on Amazon Aurora PostgreSQL often need to make operational data available for analytics without impacting production performance. This becomes especially challenging when data is distributed across multiple Aurora clusters, making it difficult to join datasets and build cross-domain analytics workflows.
+
+Lakehouse architectures built on Apache Iceberg address these challenges by providing a unified data layer with ACID transactions, schema evolution, and time travel capabilities. Amazon S3 Tables provides native support for Apache Iceberg with automatic snapshot management and compaction, making it an ideal foundation for a governed lakehouse architecture.
+
+However, organizations still need a reliable way to continuously ingest operational database changes into the lakehouse while preserving transactional performance.
+
+This solution demonstrates how to build a near real-time change data capture (CDC) pipeline that streams data from Amazon Aurora PostgreSQL into Apache Iceberg tables in Amazon S3 Tables using Debezium, Amazon MSK Connect, AWS Lambda, and Amazon Data Firehose. This architecture enables scalable analytics and lakehouse adoption while keeping transactional workloads isolated from analytics processing.
 
 The architecture uses a single-topic routing pattern: Debezium captures changes from all monitored tables, a Single Message Transform (SMT) routes them to one Kafka topic, and a Lambda function directs each record to the correct Iceberg table. This eliminates the need for multiple Firehose streams and VPC connections, reducing both cost and operational complexity.
 
