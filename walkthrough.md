@@ -8,17 +8,27 @@ Before you begin, ensure you have the following:
 
 - An AWS account with permissions to create Amazon MSK, Amazon Data Firehose, AWS Lambda, Amazon S3 Tables, AWS Lake Formation, and IAM resources.
 - An existing VPC with at least two subnets in different Availability Zones.
-- An Aurora PostgreSQL cluster in the same VPC with logical replication enabled. To enable logical replication, set the `rds.logical_replication` parameter to `1` in your Aurora cluster's parameter group and reboot the cluster. For more information, see [Logical replication for Aurora PostgreSQL](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.html).
+- An Aurora PostgreSQL cluster in the same VPC.
 - Aurora database credentials stored in AWS Secrets Manager. Note the secret ARN — you need it for the CDK configuration.
 - AWS CDK v2 installed (`npm install -g aws-cdk`).
 - Node.js 18+ and npm.
 - AWS CLI v2 installed and configured with appropriate credentials.
 
-### Step 1: Configure Aurora PostgreSQL for CDC
+### Step 1: Enable CDC in Aurora PostgreSQL
 
-Debezium captures changes by reading the PostgreSQL Write-Ahead Log (WAL) through logical replication. Before Debezium can start capturing changes, you need to create the source tables, a logical replication slot, and a publication that tells PostgreSQL which tables to include in the replication stream.
+PostgreSQL supports change data capture (CDC) through its logical replication framework, which allows database changes to be streamed from the write-ahead log (WAL). Debezium uses this mechanism to continuously read row-level changes and publish them to Kafka topics.
 
-Connect to your Aurora PostgreSQL cluster using your preferred SQL client and run the following statements to create three sample tables:
+To enable logical replication in Amazon Aurora PostgreSQL, configure a custom DB cluster parameter group:
+
+1. Create a custom parameter group and set the following parameter:
+
+   ```
+   rds.logical_replication = 1
+   ```
+
+2. Apply the parameter group to your Aurora cluster and reboot the cluster for the change to take effect. For more information, see [Logical replication for Aurora PostgreSQL](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.html).
+
+3. Connect to your Aurora PostgreSQL cluster using your preferred SQL client and create the source tables:
 
 ```sql
 CREATE TABLE public.orders (
@@ -42,7 +52,7 @@ CREATE TABLE public.products (
 );
 ```
 
-Next, create a logical replication slot and a publication. The replication slot ensures that PostgreSQL retains WAL segments until Debezium has consumed them, preventing data loss. The publication defines which tables are included in the change stream.
+4. Create a logical replication slot and a publication. The replication slot ensures that PostgreSQL retains WAL segments until Debezium has consumed them, preventing data loss. The publication defines which tables are included in the change stream.
 
 ```sql
 SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
@@ -51,7 +61,7 @@ CREATE PUBLICATION dbz_publication FOR TABLE public.orders, public.products;
 
 The `pgoutput` plugin is PostgreSQL's native logical decoding output plugin, which is available on Aurora PostgreSQL without any additional extensions.
 
-Verify that both the replication slot and publication were created successfully:
+5. Verify that both the replication slot and publication were created successfully:
 
 ```sql
 SELECT * FROM pg_replication_slots WHERE slot_name = 'debezium_slot';
