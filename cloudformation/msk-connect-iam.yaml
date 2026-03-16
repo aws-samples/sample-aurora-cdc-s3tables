@@ -6,6 +6,10 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub msk-connect-plugins-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -16,6 +20,24 @@ Resources:
       Tags:
         - Key: Purpose
           Value: msk-connect-debezium-plugins
+
+  MSKConnectPluginBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MSKConnectPluginBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt MSKConnectPluginBucket.Arn
+              - !Sub ${MSKConnectPluginBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
 
   MSKConnectServiceRole:
     Type: AWS::IAM::Role
