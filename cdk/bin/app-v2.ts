@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
+import { Aspects } from 'aws-cdk-lib';
+import { AwsSolutionsChecks } from 'cdk-nag';
 import { MskClusterStack } from '../lib/v2/1-msk-cluster-stack';
 import { MskConnectIamStack } from '../lib/v2/2-msk-connect-iam-stack';
 import { DebeziumConnectorStack } from '../lib/v2/2b-debezium-connector-stack';
@@ -68,3 +70,6 @@ const firehose = new FirehoseStack(app, 'CdcFirehose', {
   lambdaArn: lambda.functionArn,
 });
 firehose.addDependency(lf);
+
+// cdk-nag: AWS Solutions checks
+Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
