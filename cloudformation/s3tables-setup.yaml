@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Create S3 Tables namespace and table for Aurora CDC'
+
+Parameters:
+  TableBucketName:
+    Type: String
+    Default: audit-metadata-table
+    Description: S3 Tables bucket name
+  
+  Namespace:
+    Type: String
+    Default: aurora_cdc
+    Description: Namespace for CDC tables
+
+Resources:
+  # Note: S3 Tables resources must be created via AWS CLI or Console
+  # This is a placeholder stack to document the manual steps required
+  
+  DummyWaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+
+Outputs:
+  Instructions:
+    Description: Manual steps to create S3 Tables
+    Value: !Sub |
+      Run these commands to create the S3 Tables namespace and table:
+      
+      # Create namespace
+      aws s3tables create-namespace \
+        --table-bucket-arn arn:aws:s3tables:${AWS::Region}:${AWS::AccountId}:bucket/${TableBucketName} \
+        --namespace ${Namespace} \
+        --region ${AWS::Region}
+      
+      # Create table
+      aws s3tables create-table \
+        --table-bucket-arn arn:aws:s3tables:${AWS::Region}:${AWS::AccountId}:bucket/${TableBucketName} \
+        --namespace ${Namespace} \
+        --name customers \
+        --format ICEBERG \
+        --region ${AWS::Region}

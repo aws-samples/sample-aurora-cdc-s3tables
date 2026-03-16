@@ -1,0 +1,215 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Kinesis Data Firehose from MSK to S3 Tables - Debezium CDC to Apache Iceberg'
+
+Parameters:
+  MSKClusterArn:
+    Type: String
+    Description: ARN of the MSK cluster
+  
+  MSKTopicName:
+    Type: String
+    Default: aurora.cdc.public.customers
+    Description: MSK topic to consume from (Debezium CDC topic)
+  
+  S3TablesBucketName:
+    Type: String
+    Description: Name of the S3 Tables bucket (without arn prefix)
+  
+  S3TablesNamespace:
+    Type: String
+    Default: aurora_cdc
+    Description: S3 Tables namespace
+  
+  S3TablesTableName:
+    Type: String
+    Default: customers
+    Description: S3 Tables table name
+  
+  TablePrimaryKey:
+    Type: String
+    Default: customer_id
+    Description: Primary key column for the table
+  
+  BackupBucketName:
+    Type: String
+    Description: S3 bucket for Firehose backup/errors
+  
+  TransformLambdaArn:
+    Type: String
+    Description: Lambda function ARN for transforming Debezium CDC to Iceberg format
+
+Resources:
+  FirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FirehoseMSKAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kafka:GetBootstrapBrokers
+                  - kafka:DescribeCluster
+                  - kafka:DescribeClusterV2
+                Resource: !Ref MSKClusterArn
+              - Effect: Allow
+                Action:
+                  - kafka-cluster:Connect
+                  - kafka-cluster:DescribeTopic
+                  - kafka-cluster:ReadData
+                Resource:
+                  - !Sub '${MSKClusterArn}/*'
+        - PolicyName: FirehoseS3TablesAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3tables:GetTable
+                  - s3tables:GetTableBucket
+                  - s3tables:GetTableMetadataLocation
+                  - s3tables:PutTableData
+                  - s3tables:UpdateTableMetadataLocation
+                  - s3tables:GetTableMaintenanceConfiguration
+                  - s3tables:GetTableMaintenanceJobStatus
+                Resource:
+                  - !Sub 'arn:aws:s3tables:${AWS::Region}:${AWS::AccountId}:bucket/${S3TablesBucketName}'
+                  - !Sub 'arn:aws:s3tables:${AWS::Region}:${AWS::AccountId}:bucket/${S3TablesBucketName}/namespace/${S3TablesNamespace}'
+                  - !Sub 'arn:aws:s3tables:${AWS::Region}:${AWS::AccountId}:bucket/${S3TablesBucketName}/namespace/${S3TablesNamespace}/table/${S3TablesTableName}'
+        - PolicyName: FirehoseGlueAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:GetDatabase
+                  - glue:GetTable
+                  - glue:GetTableVersion
+                  - glue:GetTableVersions
+                  - glue:UpdateTable
+                  - lakeformation:GetDataAccess
+                Resource: '*'
+        - PolicyName: FirehoseS3BackupAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${BackupBucketName}'
+                  - !Sub 'arn:aws:s3:::${BackupBucketName}/*'
+        - PolicyName: FirehoseLambdaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - lambda:GetFunctionConfiguration
+                Resource: !Ref TransformLambdaArn
+        - PolicyName: FirehoseLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/*'
+
+  FirehoseLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/kinesisfirehose/msk-to-s3tables
+      RetentionInDays: 7
+
+  FirehoseLogStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName: !Ref FirehoseLogGroup
+      LogStreamName: IcebergDelivery
+
+  MSKToS3TablesFirehose:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    DependsOn: FirehoseLogStream
+    Properties:
+      DeliveryStreamName: msk-to-s3tables-firehose
+      DeliveryStreamType: MSKAsSource
+      MSKSourceConfiguration:
+        MSKClusterARN: !Ref MSKClusterArn
+        TopicName: !Ref MSKTopicName
+        AuthenticationConfiguration:
+          RoleARN: !GetAtt FirehoseRole.Arn
+          Connectivity: PUBLIC
+      IcebergDestinationConfiguration:
+        RoleARN: !GetAtt FirehoseRole.Arn
+        ProcessingConfiguration:
+          Enabled: true
+          Processors:
+            - Type: Lambda
+              Parameters:
+                - ParameterName: LambdaArn
+                  ParameterValue: !Ref TransformLambdaArn
+                - ParameterName: BufferSizeInMBs
+                  ParameterValue: '3'
+                - ParameterName: BufferIntervalInSeconds
+                  ParameterValue: '60'
+        CatalogConfiguration:
+          CatalogArn: !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog/s3tablescatalog/${S3TablesBucketName}'
+        DestinationTableConfigurationList:
+          - DestinationDatabaseName: !Ref S3TablesNamespace
+            DestinationTableName: !Ref S3TablesTableName
+            S3ErrorOutputPrefix: !Sub 'errors/${S3TablesTableName}/'
+            UniqueKeys:
+              - !Ref TablePrimaryKey
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 1
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName: !Ref FirehoseLogGroup
+          LogStreamName: !Ref FirehoseLogStream
+        S3Configuration:
+          BucketARN: !Sub 'arn:aws:s3:::${BackupBucketName}'
+          RoleARN: !GetAtt FirehoseRole.Arn
+          Prefix: !Sub 'backup/${S3TablesTableName}/'
+          ErrorOutputPrefix: !Sub 'errors/${S3TablesTableName}/'
+          BufferingHints:
+            IntervalInSeconds: 300
+            SizeInMBs: 5
+          CompressionFormat: GZIP
+          CloudWatchLoggingOptions:
+            Enabled: true
+            LogGroupName: !Ref FirehoseLogGroup
+            LogStreamName: !Ref FirehoseLogStream
+
+Outputs:
+  FirehoseStreamArn:
+    Description: Firehose delivery stream ARN
+    Value: !GetAtt MSKToS3TablesFirehose.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FirehoseArn'
+  
+  FirehoseStreamName:
+    Description: Firehose delivery stream name
+    Value: !Ref MSKToS3TablesFirehose
+    Export:
+      Name: !Sub '${AWS::StackName}-FirehoseName'
+  
+  FirehoseRoleArn:
+    Description: Firehose IAM role ARN
+    Value: !GetAtt FirehoseRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-RoleArn'

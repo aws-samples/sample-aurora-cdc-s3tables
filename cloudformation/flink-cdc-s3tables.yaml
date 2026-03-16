@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Managed Service for Apache Flink - Aurora CDC to S3 Tables'
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: aurora-cdc-flink
+    Description: Name of the Flink application
+  
+  FlinkApplicationJarS3Bucket:
+    Type: String
+    Description: S3 bucket containing the Flink application JAR
+  
+  FlinkApplicationJarS3Key:
+    Type: String
+    Default: flink/aurora-cdc-flink-1.0.0.jar
+    Description: S3 key for the Flink application JAR
+  
+  KafkaBootstrapServers:
+    Type: String
+    Description: MSK bootstrap servers
+  
+  KafkaTopic:
+    Type: String
+    Default: aurora.cdc.public.customers
+    Description: Kafka topic to consume from
+  
+  S3TablesBucketArn:
+    Type: String
+    Description: ARN of the S3 Tables bucket
+  
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnet IDs for Flink application
+  
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Security group IDs for Flink application
+
+Resources:
+  FlinkApplicationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: kinesisanalytics.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: FlinkS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource:
+                  - !Sub 'arn:aws:s3:::${FlinkApplicationJarS3Bucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${FlinkApplicationJarS3Bucket}'
+        - PolicyName: FlinkS3TablesAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3tables:GetTable
+                  - s3tables:GetTableBucket
+                  - s3tables:GetTableMetadataLocation
+                  - s3tables:PutTableData
+                  - s3tables:UpdateTableMetadataLocation
+                Resource:
+                  - !Ref S3TablesBucketArn
+                  - !Sub '${S3TablesBucketArn}/*'
+        - PolicyName: FlinkVPCAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                Resource: '*'
+
+  FlinkApplication:
+    Type: AWS::KinesisAnalyticsV2::Application
+    Properties:
+      ApplicationName: !Ref ApplicationName
+      RuntimeEnvironment: FLINK-1_18
+      ServiceExecutionRole: !GetAtt FlinkApplicationRole.Arn
+      ApplicationConfiguration:
+        ApplicationCodeConfiguration:
+          CodeContent:
+            S3ContentLocation:
+              BucketARN: !Sub 'arn:aws:s3:::${FlinkApplicationJarS3Bucket}'
+              FileKey: !Ref FlinkApplicationJarS3Key
+          CodeContentType: ZIPFILE
+        EnvironmentProperties:
+          PropertyGroups:
+            - PropertyGroupId: FlinkApplicationProperties
+              PropertyMap:
+                KAFKA_BOOTSTRAP_SERVERS: !Ref KafkaBootstrapServers
+                KAFKA_TOPIC: !Ref KafkaTopic
+                S3_TABLES_BUCKET_ARN: !Ref S3TablesBucketArn
+                S3_TABLES_NAMESPACE: aurora_cdc
+                S3_TABLES_TABLE: customers
+        FlinkApplicationConfiguration:
+          CheckpointConfiguration:
+            ConfigurationType: DEFAULT
+          MonitoringConfiguration:
+            ConfigurationType: CUSTOM
+            LogLevel: INFO
+            MetricsLevel: APPLICATION
+          ParallelismConfiguration:
+            ConfigurationType: CUSTOM
+            Parallelism: 2
+            ParallelismPerKPU: 1
+            AutoScalingEnabled: true
+        VpcConfigurations:
+          - SecurityGroupIds: !Ref SecurityGroupIds
+            SubnetIds: !Ref SubnetIds
+
+  FlinkApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/kinesis-analytics/${ApplicationName}'
+      RetentionInDays: 7
+
+  FlinkApplicationLogStream:
+    Type: AWS::KinesisAnalyticsV2::ApplicationCloudWatchLoggingOption
+    Properties:
+      ApplicationName: !Ref FlinkApplication
+      CloudWatchLoggingOption:
+        LogStreamARN: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${FlinkApplicationLogGroup}:log-stream:kinesis-analytics-log-stream'
+
+Outputs:
+  ApplicationName:
+    Description: Flink application name
+    Value: !Ref FlinkApplication
+  
+  ApplicationArn:
+    Description: Flink application ARN
+    Value: !Sub 'arn:aws:kinesisanalytics:${AWS::Region}:${AWS::AccountId}:application/${FlinkApplication}'

@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'MSK Connect Debezium connector for Aurora PostgreSQL CDC'
+
+Parameters:
+  MSKClusterArn:
+    Type: String
+    Description: ARN of the MSK cluster
+  
+  MSKBootstrapServers:
+    Type: String
+    Description: MSK bootstrap servers (comma-separated)
+  
+  CustomPluginArn:
+    Type: String
+    Description: ARN of the Debezium custom plugin
+  
+  ServiceRoleArn:
+    Type: String
+    Description: IAM role ARN for MSK Connect
+  
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Default: subnet-0215dd02b9e3edbde,subnet-0ad591a7a23c94b6c
+    Description: Subnet IDs for connector workers
+  
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group ID for connector workers
+  
+  AuroraSecretArn:
+    Type: String
+    Description: Secrets Manager ARN for Aurora credentials
+
+Resources:
+  MSKConnectLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/msk-connect/aurora-cdc-debezium
+      RetentionInDays: 7
+
+  WorkerConfiguration:
+    Type: AWS::KafkaConnect::WorkerConfiguration
+    Properties:
+      Name: debezium-worker-config
+      Description: Worker configuration for Debezium
+      PropertiesFileContent:
+        Fn::Base64: |
+          key.converter=org.apache.kafka.connect.json.JsonConverter
+          value.converter=org.apache.kafka.connect.json.JsonConverter
+          key.converter.schemas.enable=false
+          value.converter.schemas.enable=false
+
+  DebeziumConnector:
+    Type: AWS::KafkaConnect::Connector
+    DependsOn: MSKConnectLogGroup
+    Properties:
+      ConnectorName: aurora-postgres-debezium-connector
+      ConnectorDescription: Debezium CDC connector for Aurora PostgreSQL
+      KafkaCluster:
+        ApacheKafkaCluster:
+          BootstrapServers: !Ref MSKBootstrapServers
+          Vpc:
+            Subnets: !Ref SubnetIds
+            SecurityGroups:
+              - !Ref SecurityGroupId
+      KafkaClusterClientAuthentication:
+        AuthenticationType: NONE
+      KafkaClusterEncryptionInTransit:
+        EncryptionType: PLAINTEXT
+      KafkaConnectVersion: 2.7.1
+      Plugins:
+        - CustomPlugin:
+            CustomPluginArn: !Ref CustomPluginArn
+            Revision: 1
+      ServiceExecutionRoleArn: !Ref ServiceRoleArn
+      Capacity:
+        ProvisionedCapacity:
+          McuCount: 2
+          WorkerCount: 2
+      WorkerConfiguration:
+        WorkerConfigurationArn: !Ref WorkerConfiguration
+        Revision: 1
+      ConnectorConfiguration:
+        connector.class: io.debezium.connector.postgresql.PostgresConnector
+        tasks.max: '1'
+        database.hostname: aurora-cdc-rds-auroracluster-l1vzx1j2gxdb.cluster-crkeeemtkh5z.us-east-1.rds.amazonaws.com
+        database.port: '5432'
+        database.user: dbadmin
+        database.password: Rb7-MotibaghDelhi2026
+        database.dbname: cdcdemo
+        database.server.name: aurora_cdc
+        plugin.name: pgoutput
+        slot.name: debezium_slot
+        publication.name: dbz_publication
+        table.include.list: public.customers,public.orders,public.products
+        topic.prefix: aurora.cdc
+        schema.history.internal.kafka.topic: schema-changes.aurora
+        schema.history.internal.kafka.bootstrap.servers: !Ref MSKBootstrapServers
+        decimal.handling.mode: string
+        time.precision.mode: adaptive_time_microseconds
+        tombstones.on.delete: 'false'
+        snapshot.mode: initial
+        publication.autocreate.mode: filtered
+      LogDelivery:
+        WorkerLogDelivery:
+          CloudWatchLogs:
+            Enabled: true
+            LogGroup: !Ref MSKConnectLogGroup
+
+Outputs:
+  ConnectorArn:
+    Description: Debezium connector ARN
+    Value: !Ref DebeziumConnector
+    Export:
+      Name: !Sub ${AWS::StackName}-ConnectorArn
+  
+  ConnectorName:
+    Description: Debezium connector name
+    Value: aurora-postgres-debezium-connector
+  
+  TopicPrefix:
+    Description: Kafka topic prefix for CDC events
+    Value: aurora.cdc
