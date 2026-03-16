@@ -21,18 +21,6 @@ Debezium captures changes by reading the PostgreSQL Write-Ahead Log (WAL) throug
 Connect to your Aurora PostgreSQL cluster using your preferred SQL client and run the following statements to create three sample tables:
 
 ```sql
-CREATE TABLE public.customers (
-    customer_id SERIAL PRIMARY KEY,
-    first_name VARCHAR(100),
-    last_name VARCHAR(100),
-    email VARCHAR(255),
-    phone VARCHAR(50),
-    registration_date VARCHAR(50),
-    customer_tier VARCHAR(20),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
 CREATE TABLE public.orders (
     order_id SERIAL PRIMARY KEY,
     customer_id INTEGER,
@@ -58,7 +46,7 @@ Next, create a logical replication slot and a publication. The replication slot 
 
 ```sql
 SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
-CREATE PUBLICATION dbz_publication FOR TABLE public.customers, public.orders, public.products;
+CREATE PUBLICATION dbz_publication FOR TABLE public.orders, public.products;
 ```
 
 The `pgoutput` plugin is PostgreSQL's native logical decoding output plugin, which is available on Aurora PostgreSQL without any additional extensions.
@@ -157,13 +145,13 @@ export const CONFIG = {
   debeziumWorkerConfigArn: '<workerConfigurationArn-from-step-2>',
   debeziumPluginBucket: '<your-plugin-bucket-name>',
   debeziumTopicPrefix: 'aurora.cdc',
-  debeziumTables: 'public.customers,public.orders,public.products',
+  debeziumTables: 'public.orders,public.products',
 
   // S3 Tables — the table bucket name must be globally unique
   s3TablesBucketName: '<your-table-bucket-name>',
   s3TablesNamespace: 'aurora_cdc',
-  tables: ['customers', 'orders', 'products'],
-  tableKeys: { customers: 'customer_id', orders: 'order_id', products: 'product_id' },
+  tables: ['orders', 'products'],
+  tableKeys: { orders: 'order_id', products: 'product_id' },
 
   // Firehose — general purpose S3 bucket for failed record backup
   firehoseBackupBucket: '<your-backup-bucket-name>',
@@ -193,7 +181,7 @@ When prompted, review the IAM changes and confirm the deployment. The CDK deploy
 | `CdcMskCluster` | MSK cluster (2× kafka.m5.large brokers) with dual authentication (IAM for Firehose, unauthenticated for Debezium), multi-VPC private connectivity for Firehose PrivateLink, custom configuration with `auto.create.topics.enable=true`, MSK security group with ingress rules for Aurora and self-referencing rules for MSK Connect workers |
 | `CdcMskConnectIam` | MSK Connect service execution role with permissions for Kafka cluster operations, VPC networking, S3 plugin access, and Secrets Manager; plugin S3 bucket with SSE encryption and SSL-only policy; CloudWatch log group for connector logs |
 | `CdcDebeziumConnector` | Debezium PostgreSQL connector with `ByLogicalTableRouter` Single Message Transform (SMT) that routes CDC events from all three tables to a single Kafka topic (`aurora.cdc.all-tables`); provisioned capacity with 2 MCU × 2 workers |
-| `CdcS3Tables` | S3 table bucket, `aurora_cdc` namespace, and three Iceberg tables (`customers`, `orders`, `products`) with full column schemas matching the Aurora source tables |
+| `CdcS3Tables` | S3 table bucket, `aurora_cdc` namespace, and two Iceberg tables (`orders`, `products`) with full column schemas matching the Aurora source tables |
 | `CdcLambdaTransform` | Lambda function (`firehose-debezium-transform`) that converts Debezium CDC envelope format to flattened JSON, maps operation types, and sets `otfMetadata` routing for multi-table delivery |
 | `CdcFirehoseRole` | Firehose IAM role with permissions for MSK (including `kafka:CreateVpcConnection` for PrivateLink), S3 Tables, Glue Data Catalog, Lake Formation, VPC networking, Lambda invocation, and CloudWatch logging |
 | `CdcLakeFormation` | Lake Formation database-level and table-level permissions (ALL) for the Firehose role on the S3 Tables sub-catalog; MSK cluster resource policy allowing the Firehose service principal to create VPC connections |
@@ -236,9 +224,8 @@ aws logs tail /aws/msk-connect/aurora-cdc-debezium --follow --region <your-regio
 You should see messages indicating the snapshot phase completing and the transition to streaming mode:
 
 ```
-Finished exporting 0 records for table 'public.customers' (1 of 3 tables)
-Finished exporting 0 records for table 'public.orders' (2 of 3 tables)
-Finished exporting 0 records for table 'public.products' (3 of 3 tables)
+Finished exporting 0 records for table 'public.orders' (1 of 2 tables)
+Finished exporting 0 records for table 'public.products' (2 of 2 tables)
 Snapshot completed
 Starting streaming
 ```
@@ -263,13 +250,6 @@ With the pipeline running, insert test data into the Aurora PostgreSQL source ta
 Connect to your Aurora PostgreSQL cluster and run the following inserts:
 
 ```sql
--- Insert customers
-INSERT INTO public.customers (first_name, last_name, email, phone, registration_date, customer_tier)
-VALUES
-  ('Jane', 'Doe', 'jane@example.com', '555-0100', '2026-01-15', 'gold'),
-  ('John', 'Smith', 'john@example.com', '555-0101', '2026-01-16', 'silver'),
-  ('Alice', 'Johnson', 'alice@example.com', '555-0102', '2026-01-17', 'bronze');
-
 -- Insert orders
 INSERT INTO public.orders (customer_id, order_date, total_amount, status)
 VALUES
@@ -285,7 +265,7 @@ VALUES
   ('Coffee Maker', 'Kitchen', 49.99, 200);
 ```
 
-This creates 9 records across 3 tables. Each record generates a Debezium CDC event with operation type `c` (create), which the Lambda function maps to an `insert` operation in the corresponding Iceberg table.
+This creates 6 records across 2 tables. Each record generates a Debezium CDC event with operation type `c` (create), which the Lambda function maps to an `insert` operation in the corresponding Iceberg table.
 
 ### Step 7: Verify data delivery
 
@@ -304,7 +284,7 @@ aws cloudwatch get-metric-statistics \
   --region <your-region>
 ```
 
-You should see a `Sum` value of 9 (or more, if you ran additional inserts). If the value is 0, wait another minute and retry — there is a short delay between MSK topic delivery and Firehose metric reporting.
+You should see a `Sum` value of 6 (or more, if you ran additional inserts). If the value is 0, wait another minute and retry — there is a short delay between MSK topic delivery and Firehose metric reporting.
 
 You can also check the Lambda transform function's invocation metrics to confirm it is processing records:
 
@@ -328,9 +308,6 @@ With data delivered to S3 Tables, you can query the Iceberg tables using Amazon 
 Open the Athena console, select the **AwsDataCatalog** data source, and run the following queries:
 
 ```sql
--- Query customers table
-SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."customers";
-
 -- Query orders table
 SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders";
 
@@ -343,9 +320,6 @@ Replace `<table-bucket-name>` with your S3 table bucket name. You should see the
 Now test that update and delete operations propagate correctly through the pipeline. Run the following statements in Aurora:
 
 ```sql
--- Update a customer's tier
-UPDATE public.customers SET customer_tier = 'platinum' WHERE customer_id = 1;
-
 -- Update an order status
 UPDATE public.orders SET status = 'delivered' WHERE order_id = 2;
 
@@ -356,9 +330,6 @@ DELETE FROM public.products WHERE product_id = 3;
 Wait 60–90 seconds for the changes to propagate, then query Athena again:
 
 ```sql
--- Verify the update: customer_id 1 should now show 'platinum'
-SELECT customer_id, first_name, customer_tier FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."customers";
-
 -- Verify the update: order_id 2 should now show 'delivered'
 SELECT order_id, status FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders";
 
@@ -366,15 +337,15 @@ SELECT order_id, status FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc".
 SELECT product_id, product_name FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."products";
 ```
 
-The customers table should show `platinum` for Jane Doe, the orders table should show `delivered` for order 2, and the products table should contain only 2 records (Wireless Headphones and Running Shoes). This confirms that the pipeline correctly handles all three CDC operation types: inserts, updates, and deletes.
+The orders table should show `delivered` for order 2, and the products table should contain only 2 records (Wireless Headphones and Running Shoes). This confirms that the pipeline correctly handles all three CDC operation types: inserts, updates, and deletes.
 
 > **Note:** Because S3 Tables provides automatic compaction and snapshot management for Iceberg tables, you do not need to run manual maintenance operations. S3 Tables handles compaction of small files and expiration of old snapshots automatically.
 
 You can also use Iceberg's time travel capability to query the table as it existed before the updates:
 
 ```sql
--- Query the customers table as of 5 minutes ago
-SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."customers"
+-- Query the orders table as of 5 minutes ago
+SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders"
 FOR TIMESTAMP AS OF current_timestamp - interval '5' minute;
 ```
 
