@@ -109,9 +109,9 @@ Resources:
       Description: Aurora PostgreSQL credentials for Debezium
       SecretString: !Sub |
         {
-          "username": "dbadmin",
-          "password": "Rb7-MotibaghDelhi2026",
-          "host": "aurora-cdc-rds-auroracluster-l1vzx1j2gxdb.cluster-crkeeemtkh5z.us-east-1.rds.amazonaws.com",
+          "username": "<db-user>",
+          "password": "<your-db-password>",
+          "host": "<aurora-cluster-endpoint>",
           "port": 5432,
           "dbname": "cdcdemo"
         }

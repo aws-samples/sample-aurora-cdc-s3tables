@@ -52,6 +52,10 @@ Resources:
           ToPort: 2181
           SourceSecurityGroupId: !Ref AuroraSecurityGroup
           Description: Zookeeper from Aurora SG
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+          Description: Allow all outbound traffic
       Tags:
         - Key: Name
           Value: msk-aurora-cdc-sg
