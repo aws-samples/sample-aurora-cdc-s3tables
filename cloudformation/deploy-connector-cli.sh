@@ -69,7 +69,7 @@ AWS_PROFILE=${PROFILE} aws kafkaconnect create-connector \
     "database.hostname": "aurora-cdc-rds-auroracluster-l1vzx1j2gxdb.cluster-crkeeemtkh5z.us-east-1.rds.amazonaws.com",
     "database.port": "5432",
     "database.user": "dbadmin",
-    "database.password": "Rb7-MotibaghDelhi2026",
+    "database.password": "<your-db-password>",
     "database.dbname": "cdcdemo",
     "database.server.name": "aurora_cdc",
     "plugin.name": "pgoutput",
