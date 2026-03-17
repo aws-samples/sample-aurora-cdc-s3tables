@@ -36,6 +36,85 @@ The pipeline consists of six components working together:
 
 Amazon Data Firehose supports only one MSK topic per delivery stream. Without routing, each table would require its own Firehose stream and VPC connection (~$22/month per AZ). The single-topic pattern with Lambda-based routing uses one Firehose stream for all tables, significantly reducing cost.
 
+## Data Flow
+
+The following describes how data moves through each stage of the pipeline, including the networking and protocols involved.
+
+### Stage 1: Aurora PostgreSQL → Debezium (MSK Connect)
+
+```
+Aurora PostgreSQL ◄──── Debezium Connector (MSK Connect workers) ────► MSK Brokers
+   (port 5432)              (ENIs in your VPC)                         (port 9092)
+```
+
+Debezium runs on MSK Connect, which launches worker JVMs as Elastic Network Interfaces (ENIs) inside your VPC subnets. The workers initiate an outbound connection to Aurora PostgreSQL on port 5432 using the standard PostgreSQL protocol — Aurora does not connect to MSK Connect; the connector reaches out to Aurora.
+
+Once connected, Debezium uses PostgreSQL's native logical replication protocol (via the `pgoutput` plugin) to stream changes from the replication slot (`debezium_slot`). Unlike polling-based approaches, this is a persistent TCP connection where Aurora pushes WAL changes to Debezium in real time. This means:
+
+- **Zero impact on query performance** — Debezium reads from the WAL, not from the tables themselves.
+- **No triggers or application changes** — CDC is handled entirely at the database replication layer.
+- **Guaranteed ordering** — Changes arrive in the exact order they were committed to the database.
+
+The security group configuration enables this connectivity:
+- The **Aurora security group** has an inbound rule allowing port 5432 from the MSK security group.
+- The **MSK security group** is assigned to the MSK Connect workers, giving them network access to both Aurora and the MSK brokers.
+
+### Stage 2: Debezium → Amazon MSK (Single Topic Routing)
+
+After reading a change from the WAL, the Debezium worker serializes it as a JSON-encoded Kafka message and publishes it to the MSK cluster on port 9092 (PLAINTEXT protocol). Without the routing transform, Debezium would create separate topics per table (e.g., `aurora.cdc.public.orders`, `aurora.cdc.public.products`).
+
+The `ByLogicalTableRouter` Single Message Transform (SMT) intercepts each message before it is published and reroutes all events to a single topic:
+
+```
+aurora.cdc.public.orders    ──┐
+                               ├──► aurora.cdc.all-tables (single topic)
+aurora.cdc.public.products  ──┘
+```
+
+Each message retains the original source table name in the Debezium envelope (`source.table` field), which the Lambda function uses downstream for routing.
+
+### Stage 3: Amazon MSK → Amazon Data Firehose (PrivateLink)
+
+Firehose connects to the MSK cluster using IAM authentication over a PrivateLink VPC connection. This is a private network path — traffic never traverses the public internet. Firehose creates a managed VPC endpoint to the MSK brokers and continuously polls the `aurora.cdc.all-tables` topic for new messages.
+
+The MSK cluster requires two configurations to support this:
+- **Multi-VPC private connectivity with IAM** — Creates the PrivateLink endpoint that Firehose connects through.
+- **Cluster resource policy** — Grants the `firehose.amazonaws.com` service principal permission to call `kafka:CreateVpcConnection`.
+
+### Stage 4: Firehose → Lambda Transform
+
+For each batch of records, Firehose invokes the Lambda function synchronously. The function performs three operations on each Debezium CDC event:
+
+1. **Decode** — Extracts the base64-encoded Kafka message from the `kafkaRecordValue` field (MSK-sourced Firehose uses this field instead of `data`).
+2. **Flatten** — Extracts the row data from the Debezium envelope. For inserts and updates, it uses the `after` field; for deletes, it uses the `before` field (since `after` is null for deletes).
+3. **Route** — Sets the `otfMetadata` block with `destinationTableName` (extracted from `source.table`) and `operation` (mapped from Debezium's `c`/`u`/`d`/`r` codes to Firehose's `insert`/`update`/`delete`).
+
+### Stage 5: Firehose → Amazon S3 Tables (Iceberg)
+
+Firehose reads the `otfMetadata` from each transformed record and routes it to the correct Iceberg table in S3 Tables. Using the `uniqueKeys` configuration (e.g., `order_id` for orders, `product_id` for products), Firehose performs the appropriate row-level operation:
+
+| Operation | Behavior |
+|-----------|----------|
+| `insert` | Appends a new row to the Iceberg table |
+| `update` | Matches the existing row by unique key and replaces it |
+| `delete` | Matches the existing row by unique key and removes it |
+
+Firehose buffers records based on the configured hints (1 MiB or 60 seconds, whichever is reached first) and writes them as Parquet data files to the underlying S3 storage managed by S3 Tables. S3 Tables automatically handles Iceberg snapshot management and compaction.
+
+### End-to-End Latency
+
+Under typical conditions, a change committed in Aurora appears in the Iceberg table within **60–90 seconds**:
+
+| Stage | Typical Latency |
+|-------|----------------|
+| Aurora WAL → Debezium | < 1 second |
+| Debezium → MSK topic | < 1 second |
+| MSK → Firehose pickup | 1–5 seconds |
+| Firehose buffering | Up to 60 seconds (configurable) |
+| Firehose → S3 Tables write | 1–5 seconds |
+
+The Firehose buffer interval is the dominant factor. Reducing it below 60 seconds decreases latency but may increase the number of small Iceberg data files (which S3 Tables compaction handles automatically).
+
 ## Prerequisites
 
 - An AWS account with permissions to create the resources listed below
