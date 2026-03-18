@@ -17,7 +17,7 @@ export class LambdaTransformStack extends cdk.Stack {
 
     const fn = new lambda.Function(this, 'Function', {
       functionName: 'firehose-debezium-transform',
-      runtime: lambda.Runtime.PYTHON_3_12,
+      runtime: lambda.Runtime.PYTHON_3_14,
       handler: 'firehose-debezium-transform.lambda_handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda')),
       timeout: cdk.Duration.seconds(60),
