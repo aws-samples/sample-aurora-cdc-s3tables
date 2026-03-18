@@ -360,10 +360,8 @@ SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders";
 │       └── 7-firehose-stack.ts                # Firehose delivery stream
 ├── lambda/
 │   └── firehose-debezium-transform.py         # CDC event transform + multi-table routing
-└── cloudformation/
-    ├── build-debezium-plugin.sh               # Build and upload Debezium plugin to S3
-    ├── deploy-connector-cli.sh                # CLI-based connector deployment
-    └── *.yaml                                 # Reference CloudFormation templates
+├── scripts/
+│   └── build-debezium-plugin.sh               # Build and upload Debezium plugin to S3
 ```
 
 ## Cost Considerations
