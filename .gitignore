@@ -3,12 +3,17 @@ aurora-cdc-s3tables-architecture.drawio
 Blog Post Proposal Template.docx
 Blog_Proposal_Debezium_MSK_S3Tables.md
 blog-draft.md
+blog-post.md
 DEPLOYMENT_HISTORY.md
 Stream Aurora to S3Tables Proposal.docx
+
+# Screenshots (internal, not for public repo)
+screenshots/
 
 # CDK
 cdk/cdk.out/
 cdk/node_modules/
+cdk/cdk.context.json
 
 # Generated
 generated-diagrams/
@@ -25,4 +30,5 @@ node_modules/
 # Worklog
 worklog.log
 worklog.json
+worklog-git-push.json
 walkthrough.md

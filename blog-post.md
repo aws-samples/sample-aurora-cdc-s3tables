@@ -6,7 +6,7 @@ Lakehouse architectures built on [Apache Iceberg](https://iceberg.apache.org/) a
 
 However, organizations still need a reliable way to continuously ingest operational database changes into the lakehouse while preserving transactional performance.
 
-In this post, we show you how to build a near real-time change data capture (CDC) pipeline that streams data from Aurora PostgreSQL into Apache Iceberg tables in Amazon S3 Tables using [Debezium](https://debezium.io/), [Amazon MSK Connect](https://docs.aws.amazon.com/msk/latest/developerguide/msk-connect.html), [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html), and [Amazon Data Firehose](https://docs.aws.amazon.com/firehose/latest/dev/what-is-this-service.html). We deploy the infrastructure using the [AWS Cloud Development Kit](https://docs.aws.amazon.com/cdk/v2/guide/home.html) (AWS CDK). This architecture enables scalable analytics and lakehouse adoption while keeping transactional workloads isolated from analytics processing.
+In this post, we show you how to build a near real-time change data capture (CDC) pipeline that streams data from Aurora PostgreSQL into Apache Iceberg tables in Amazon S3 Tables using Debezium, Amazon MSK Connect, AWS Lambda, and Amazon Data Firehose. We deploy the infrastructure using the [AWS Cloud Development Kit](https://docs.aws.amazon.com/cdk/v2/guide/home.html) (AWS CDK). This architecture enables scalable analytics and lakehouse adoption while keeping transactional workloads isolated from analytics processing.
 
 ## Solution overview
 
@@ -16,11 +16,20 @@ The following diagram shows the architecture of the CDC pipeline.
 
 ![Architecture Diagram](aurora-cdc-s3tables-architecture.png)
 
-The pipeline uses a single-topic routing pattern: Debezium captures changes from all monitored tables, a [Single Message Transform](https://debezium.io/documentation/reference/stable/transformations/topic-routing.html) (SMT) routes them to one [Amazon Managed Streaming for Apache Kafka](https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html) (Amazon MSK) topic, and a Lambda function directs each record to the correct Iceberg table. This eliminates the need for multiple Firehose streams and VPC connections, reducing both cost and operational complexity.
+The pipeline consists of six components:
 
-The data flows through five stages:
+1. [Amazon Aurora PostgreSQL-Compatible Edition](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Aurora.AuroraPostgreSQL.html) (Aurora PostgreSQL) as the source database with logical replication enabled
+2. [Debezium](https://debezium.io/) running on [Amazon MSK Connect](https://docs.aws.amazon.com/msk/latest/developerguide/msk-connect.html) to capture row-level changes from the PostgreSQL write-ahead log (WAL)
+3. [Amazon Managed Streaming for Apache Kafka](https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html) (Amazon MSK) as the streaming backbone
+4. [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) to transform Debezium CDC events and route them to the correct destination table
+5. [Amazon Data Firehose](https://docs.aws.amazon.com/firehose/latest/dev/what-is-this-service.html) to deliver records from MSK to Apache Iceberg tables
+6. [Amazon S3 Tables](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html) as the managed Iceberg destination with automatic compaction and snapshot management
 
-1. **Aurora PostgreSQL to Debezium** - Debezium runs on MSK Connect as worker JVMs with [Elastic Network Interfaces](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html) (ENIs) in your VPC. The workers connect to Aurora PostgreSQL on port 5432 and use PostgreSQL's native [logical replication](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.html) protocol (via the `pgoutput` plugin) to stream changes from the write-ahead log (WAL). This is a persistent TCP connection where Aurora pushes WAL changes to Debezium in near real-time, with zero impact on query performance.
+A key design decision in this architecture is the single-topic routing pattern. Amazon Data Firehose supports only one MSK topic per delivery stream. Without routing, each source table would require its own Firehose stream and [VPC connection](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html). Instead, we use a Debezium [Single Message Transform](https://debezium.io/documentation/reference/stable/transformations/topic-routing.html) (SMT) to route changes from all monitored tables into a single MSK topic, and the Lambda function directs each record to the correct Iceberg table. This reduces cost and operational complexity by using one Firehose stream for all tables.
+
+The data flows through the following five stages:
+
+1. **Aurora PostgreSQL to Debezium** - Debezium runs on MSK Connect as worker JVMs with [Elastic Network Interfaces](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html) (ENIs) in your VPC. The workers connect to Aurora PostgreSQL on port 5432 and use PostgreSQL's native [logical replication](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.html) protocol (via the `pgoutput` plugin) to stream changes from the write-ahead log (WAL). This is a persistent TCP connection where Aurora pushes WAL changes to Debezium in near real-time, with minimal impact on query performance because Debezium reads from the WAL rather than querying the tables directly.
 
 2. **Debezium to Amazon MSK** - The Debezium worker serializes each change as a JSON-encoded Kafka message and publishes it to the MSK cluster on port 9092. The `ByLogicalTableRouter` SMT reroutes events from all tables (for example, `aurora.cdc.public.orders` and `aurora.cdc.public.products`) into a single topic (`aurora.cdc.all-tables`). Each message retains the original source table name in the Debezium envelope.
 
@@ -28,11 +37,58 @@ The data flows through five stages:
 
 4. **Firehose to Lambda transform** - For each batch of records, Firehose invokes the Lambda function synchronously. The function decodes the Kafka message, flattens the Debezium envelope, and sets `otfMetadata` routing with the destination table name and operation type (`insert`, `update`, or `delete`).
 
-5. **Firehose to Amazon S3 Tables** - Firehose reads the `otfMetadata` from each transformed record and routes it to the correct Iceberg table. Using the configured unique keys (for example, `order_id` for orders), Firehose performs the appropriate row-level operation. Firehose buffers records based on [buffering hints](https://docs.aws.amazon.com/firehose/latest/dev/create-configure.html) (these are treated as hints, and Firehose may choose different values when optimal) and writes them as Parquet data files. S3 Tables automatically handles Iceberg snapshot management and [compaction](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-compaction.html).
+5. **Firehose to Amazon S3 Tables** - Firehose reads the `otfMetadata` from each transformed record and routes it to the correct Iceberg table. Using the configured unique keys (for example, `order_id` for orders), Firehose performs the appropriate row-level operation. Firehose buffers records based on [buffering hints](https://docs.aws.amazon.com/firehose/latest/APIReference/API_BufferingHints.html) (these are treated as hints, and Firehose may choose different values when optimal) and writes them as Parquet data files. S3 Tables automatically handles Iceberg snapshot management and [compaction](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-compaction.html).
 
-### Why single-topic routing?
+Once data lands in S3 Tables, [AWS Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/what-is-lake-formation.html) provides centralized access control for the Iceberg tables, and downstream services such as [Amazon Athena](https://docs.aws.amazon.com/athena/latest/ug/what-is.html), [Amazon Redshift](https://docs.aws.amazon.com/redshift/latest/mgmt/welcome.html), or [Amazon SageMaker Unified Studio](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/what-is-sagemaker-unified-studio.html) can query the tables directly.
 
-Amazon Data Firehose supports only one MSK topic per delivery stream. Without routing, each table would require its own Firehose stream and its own [VPC connection](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html). The single-topic pattern with Lambda-based routing uses one Firehose stream for all tables, reducing cost and operational overhead.
+### Debezium event transformation
+
+Debezium produces CDC events in an [envelope structure](https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-events) containing both the previous and current state of a row, along with metadata about the source database, table, and operation type. However, Firehose expects records in a flattened JSON format with routing metadata that indicates the target table and operation type.
+
+The Lambda function bridges this gap by performing three operations on each record:
+
+1. **Decode** - Extracts the base64-encoded Kafka message from the `kafkaRecordValue` field. When Firehose uses Amazon MSK as a source, incoming records use the `kafkaRecordValue` field rather than the `data` field used with [Amazon Kinesis Data Streams](https://docs.aws.amazon.com/streams/latest/dev/introduction.html) or Direct PUT sources.
+
+2. **Flatten and extract** - Extracts the row data from the Debezium envelope. For inserts and updates, the function uses the `after` field (the row after the change). For deletes, it uses the `before` field, because the `after` field is null when a row is removed.
+
+3. **Route** - Sets the [`otfMetadata`](https://docs.aws.amazon.com/firehose/latest/dev/apache-iceberg-format-input-record-different.html) block with `destinationTableName` (extracted from the Debezium `source.table` field) and `operation` (mapped from Debezium's single-character codes to Firehose's operation types).
+
+The following table shows how Debezium operation codes map to Firehose Iceberg operations:
+
+| Debezium code | Meaning | Firehose operation |
+|---------------|---------|-------------------|
+| `c` | Row created (insert) | `insert` |
+| `u` | Row updated | `update` |
+| `d` | Row deleted | `delete` |
+| `r` | Snapshot read (initial load) | `insert` |
+
+For example, the function transforms this Debezium envelope:
+
+```json
+{
+  "op": "c",
+  "before": null,
+  "after": {"order_id": 1, "customer_id": 1, "total_amount": 299.99},
+  "source": {"table": "orders", "db": "cdcdemo"}
+}
+```
+
+Into a flattened record with routing metadata:
+
+```json
+{
+  "data": {"order_id": 1, "customer_id": 1, "total_amount": 299.99},
+  "metadata": {
+    "otfMetadata": {
+      "destinationDatabaseName": "aurora_cdc",
+      "destinationTableName": "orders",
+      "operation": "insert"
+    }
+  }
+}
+```
+
+This routing metadata is what enables a single Firehose stream to write to multiple destination tables. For more information, see [Route incoming records to different Iceberg tables](https://docs.aws.amazon.com/firehose/latest/dev/apache-iceberg-format-input-record-different.html).
 
 ## Prerequisites
 
@@ -147,13 +203,15 @@ value.converter.schemas.enable=false' | base64)"
 
 Note the `customPluginArn` and `workerConfigurationArn` from the output - you need these for the CDK configuration in the next step.
 
+> **Note:** The custom plugin and worker configuration are created via the AWS CLI because the Debezium connector JARs must be downloaded from the [Debezium project](https://debezium.io/releases/) and packaged manually. The remaining infrastructure is deployed using the AWS CDK in the following steps.
+
 ### Step 3: Configure the CDK project
 
 Clone the sample repository and install dependencies:
 
 ```bash
-git clone https://github.com/aws-samples/amazon-aurora-cdc-to-s3-tables.git
-cd amazon-aurora-cdc-to-s3-tables/cdk
+git clone https://github.com/aws-samples/sample-aurora-cdc-s3tables.git
+cd sample-aurora-cdc-s3tables/cdk
 npm install
 ```
 
@@ -198,7 +256,7 @@ Key configuration notes:
 
 - **`auroraSecurityGroupId`** - The [security group](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html) attached to your Aurora cluster. The CDK creates an MSK security group with ingress rules allowing traffic from this security group, and a reverse rule allowing MSK Connect workers to reach Aurora on port 5432.
 - **`tableKeys`** - The primary key column for each table. Firehose uses these to match incoming records against existing rows for [update and delete operations](https://docs.aws.amazon.com/firehose/latest/dev/apache-iceberg-destination.html) in the Iceberg tables.
-- **`s3TablesBucketName`** - The name for your S3 table bucket. Table bucket names must be [globally unique](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-buckets-naming.html) across all AWS accounts.
+- **`s3TablesBucketName`** - The name for your S3 table bucket. Table bucket names must be [unique for your account in the chosen Region](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-buckets-naming.html).
 
 ### Step 4: Deploy the CDK stacks
 
@@ -218,10 +276,17 @@ When prompted, review the [IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide
 | `CdcS3Tables` | S3 table bucket, `aurora_cdc` namespace, two Iceberg tables (`orders`, `products`) with column schemas |
 | `CdcLambdaTransform` | Lambda function for CDC event transformation and multi-table routing |
 | `CdcFirehoseRole` | Firehose IAM role with permissions for Amazon MSK, S3 Tables, [AWS Glue Data Catalog](https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html), [AWS Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/what-is-lake-formation.html), VPC networking, and Lambda invocation |
-| `CdcLakeFormation` | Lake Formation database and table permissions for the Firehose role on the S3 Tables [sub-catalog](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-integrating-aws.html), MSK [cluster resource policy](https://docs.aws.amazon.com/msk/latest/developerguide/MSKConnect-iam-policies.html) granting the Firehose service principal permission to create VPC connections |
+| `CdcLakeFormation` | Lake Formation database and table permissions for the Firehose role on the S3 Tables [sub-catalog](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-integrating-aws.html), MSK [cluster resource policy](https://docs.aws.amazon.com/firehose/latest/dev/writing-with-msk.html) granting the Firehose service principal permission to create VPC connections |
 | `CdcFirehose` | Firehose delivery stream with MSK as source (private connectivity via AWS PrivateLink), Lambda processing, Apache Iceberg Tables as destination with two table configurations, and S3 backup bucket for failed records |
 
 The MSK cluster takes approximately 25 minutes to create. The Debezium connector takes approximately 5 minutes after the cluster is ready. You can monitor the deployment progress in the [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html) console.
+
+The MSK cluster requires specific configuration to support both the Debezium connector and Firehose:
+
+- **Dual authentication** - [IAM authentication](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html) is enabled for Firehose, and unauthenticated access is kept for Debezium. MSK Connect workers use the PLAINTEXT protocol to communicate with brokers, as documented in the [MSK Connect getting started tutorial](https://docs.aws.amazon.com/msk/latest/developerguide/mkc-tutorial-setup.html). This requires the cluster encryption setting `TLS_PLAINTEXT`, which supports both TLS (for Firehose via IAM) and PLAINTEXT (for MSK Connect).
+- **VPC connectivity** - [Multi-VPC private connectivity](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html) with IAM is enabled so that Firehose can create an AWS PrivateLink endpoint to the MSK brokers.
+- **Topic auto-creation** - A custom MSK configuration sets `auto.create.topics.enable=true`. Without this, Debezium fails with `UNKNOWN_TOPIC_OR_PARTITION` errors because the target topics do not exist when the connector first starts.
+- **Cluster resource policy** - A [resource-based policy](https://docs.aws.amazon.com/firehose/latest/dev/writing-with-msk.html) grants the `firehose.amazonaws.com` service principal permission to call `kafka:CreateVpcConnection`.
 
 > **Note:** The Lake Formation permissions use the S3 Tables sub-catalog format (`<account-id>:s3tablescatalog/<table-bucket-name>`) for the `CatalogId` parameter. This format is not supported by the native [`AWS::LakeFormation::PrincipalPermissions`](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lakeformation-principalpermissions.html) CloudFormation resource, so the CDK stack uses an [`AwsCustomResource`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.custom_resources.AwsCustomResource.html) construct to grant permissions via the AWS SDK.
 
@@ -343,6 +408,17 @@ The orders table should show `delivered` for order 2, and the products table sho
 
 *Figure 3. Athena query results confirming update and delete operations propagated through the pipeline.*
 
+Because S3 Tables provides automatic [compaction](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-compaction.html) and [snapshot management](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-snapshots.html) for Iceberg tables, you do not need to run manual maintenance operations. S3 Tables handles compaction of small data files and expiration of old snapshots automatically.
+
+You can also use Iceberg's [time travel](https://docs.aws.amazon.com/athena/latest/ug/querying-iceberg-table-data.html) capability to query the table as it existed before the updates:
+
+```sql
+SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders"
+FOR TIMESTAMP AS OF current_timestamp - interval '5' minute;
+```
+
+This returns the original data before the update, demonstrating the time travel capability that Apache Iceberg provides through S3 Tables.
+
 ## Cleaning up
 
 To avoid ongoing charges, delete the resources in reverse dependency order.
@@ -368,17 +444,22 @@ SELECT pg_drop_replication_slot('debezium_slot');
 DROP PUBLICATION dbz_publication;
 ```
 
+> **Important:** If you plan to redeploy the pipeline later, you do not need to drop the replication slot and publication. However, the replication slot continues to retain WAL segments while the connector is not running, which can increase storage usage on the Aurora cluster. The MSK cluster is the largest cost component of this solution and cannot be paused - it can only be deleted and recreated.
+
 ## Conclusion
 
-In this post, we showed you how to build a near real-time CDC pipeline from Aurora PostgreSQL to Apache Iceberg tables in Amazon S3 Tables. The key architectural decisions include:
+In this post, we showed you how to build a near real-time CDC pipeline from Aurora PostgreSQL to Apache Iceberg tables in Amazon S3 Tables. The key architectural decisions and benefits include:
 
 - **Single-topic routing** - Using the Debezium `ByLogicalTableRouter` SMT to route CDC events from multiple tables through one MSK topic and one Firehose stream, reducing VPC connection costs and operational complexity.
 - **Lambda-based multi-table routing** - Using `otfMetadata` to direct each record to the correct Iceberg table, enabling a single Firehose stream to perform inserts, updates, and deletes across multiple destination tables.
+- **Fully managed pipeline** - MSK Connect runs Debezium without infrastructure management, and Firehose handles delivery with automatic retries and error handling. S3 Tables manages Iceberg snapshot management and compaction automatically.
+- **CDC semantics preserved** - The Lambda transform maps Debezium operations to Iceberg insert, update, and delete operations, keeping the lakehouse synchronized with the source database.
 - **Private connectivity** - Firehose connects to MSK via AWS PrivateLink, keeping all traffic within the AWS network.
-- **Managed Iceberg operations** - S3 Tables handles snapshot management and compaction automatically, removing the need for manual table maintenance.
+- **Governed access** - Lake Formation provides centralized access control over the Iceberg tables, enabling fine-grained permissions for downstream consumers.
+- **Cross-domain analytics** - Data from multiple isolated Aurora clusters can be unified in a single S3 Tables namespace, enabling joins and analytics across datasets that were previously siloed.
 - **Infrastructure as code** - Eight AWS CDK stacks deploy the complete pipeline with dependency ordering, IAM policies, Lake Formation permissions, and security group rules.
 
-To get started, clone the [sample repository](https://github.com/aws-samples/amazon-aurora-cdc-to-s3-tables) and follow the walkthrough steps. For more information about the services used in this solution, see the [Amazon MSK Developer Guide](https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html), [Amazon Data Firehose Developer Guide](https://docs.aws.amazon.com/firehose/latest/dev/what-is-this-service.html), and [Amazon S3 Tables User Guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html).
+To get started, clone the [sample repository](https://github.com/aws-samples/sample-aurora-cdc-s3tables) and follow the walkthrough steps. For more information about the services used in this solution, see the [Amazon MSK Developer Guide](https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html), [Amazon Data Firehose Developer Guide](https://docs.aws.amazon.com/firehose/latest/dev/what-is-this-service.html), and [Amazon S3 Tables User Guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html).
 
 We encourage you to try this solution and adapt it to your own CDC workloads. If you have questions or feedback, leave a comment on this post.
 
