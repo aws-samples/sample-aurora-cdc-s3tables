@@ -13,7 +13,8 @@ export class MskConnectIamStack extends cdk.Stack {
 
     const pluginBucket = new s3.Bucket(this, 'PluginBucket', {
       bucketName: CONFIG.debeziumPluginBucket,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
     });
 
     const role = new iam.Role(this, 'ServiceRole', {
