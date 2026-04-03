@@ -404,6 +404,7 @@ aws kafkaconnect create-connector --cli-input-json '{
     "database.hostname": "<aurora-cluster-endpoint>",
     "database.port": "5432",
     "database.user": "<db-user>",
+    "database.password": "<db-password>",
     "database.dbname": "<database-name>",
     "database.server.name": "aurora_cdc",
     "plugin.name": "pgoutput",
