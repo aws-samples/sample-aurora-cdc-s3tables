@@ -14,7 +14,7 @@ export class FirehoseRoleStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: Props) {
     super(scope, id, props);
 
-    const mskClusterId = cdk.Fn.select(1, cdk.Fn.split('cluster/', props.mskClusterArn));
+    const mskClusterName = CONFIG.mskClusterName;
 
     const role = new iam.Role(this, 'Role', {
       roleName: 'firehose-msk-s3tables-role',
@@ -32,8 +32,8 @@ export class FirehoseRoleStack extends cdk.Stack {
       ],
       resources: [
         props.mskClusterArn,
-        `arn:aws:kafka:${CONFIG.region}:${CONFIG.account}:topic/${mskClusterId}/*`,
-        `arn:aws:kafka:${CONFIG.region}:${CONFIG.account}:group/${mskClusterId}/*`,
+        `arn:aws:kafka:${CONFIG.region}:${CONFIG.account}:topic/${mskClusterName}/*`,
+        `arn:aws:kafka:${CONFIG.region}:${CONFIG.account}:group/${mskClusterName}/*`,
       ],
     }));
 
