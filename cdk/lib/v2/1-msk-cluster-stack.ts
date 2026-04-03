@@ -89,6 +89,12 @@ export class MskClusterStack extends cdk.Stack {
         clientSubnets: CONFIG.subnetIds,
         securityGroups: [mskSg.securityGroupId],
         storageInfo: { ebsStorageInfo: { volumeSize: CONFIG.mskEbsVolumeSize } },
+        // NOTE: VPC connectivity with IAM must be enabled AFTER cluster creation.
+        // MSK does not allow vpcConnectivity auth schemes during CREATE.
+        // After deployment, run:
+        //   aws kafka update-connectivity --cluster-arn <arn> --current-version <ver> \
+        //     --connectivity-info '{"VpcConnectivity":{"ClientAuthentication":{"Sasl":{"Iam":{"Enabled":true}}}}}'
+        // This triggers a rolling broker restart (~20-30 min).
       },
       // Client authentication:
       //   IAM enabled   → Firehose authenticates via IAM (required for MSK source)
