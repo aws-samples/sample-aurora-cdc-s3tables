@@ -146,23 +146,21 @@ CREATE TABLE public.products (
 );
 ```
 
-4. Create a [logical replication slot](https://www.postgresql.org/docs/current/logicaldecoding-explanation.html#LOGICALDECODING-REPLICATION-SLOTS) and a [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html). The replication slot tells PostgreSQL to retain WAL segments until Debezium has consumed them. The publication defines which tables are included in the change stream.
+4. Create a [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) that defines which tables are included in the change stream. Debezium automatically creates the [logical replication slot](https://www.postgresql.org/docs/current/logicaldecoding-explanation.html#LOGICALDECODING-REPLICATION-SLOTS) when the connector starts for the first time, so you do not need to create one manually.
 
 ```sql
-SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
 CREATE PUBLICATION dbz_publication FOR TABLE public.orders, public.products;
 ```
 
-5. Verify the setup:
+5. Verify the publication was created:
 
 ```sql
-SELECT * FROM pg_replication_slots WHERE slot_name = 'debezium_slot';
 SELECT * FROM pg_publication WHERE pubname = 'dbz_publication';
 ```
 
-You should see one row returned for each query, confirming the slot and publication are active.
+You should see one row returned, confirming the publication is active.
 
-> **Important:** The replication slot retains WAL segments until consumed. If the Debezium connector is stopped for an extended period, WAL segments can accumulate and increase storage usage on the Aurora cluster. Monitor the `ReplicationSlotDiskUsage` [Amazon CloudWatch](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html) metric for your Aurora cluster.
+> **Important:** When the Debezium connector starts (Step 6), it creates a replication slot named `debezium_slot`. This slot retains WAL segments until consumed. If the connector is stopped for an extended period, WAL segments can accumulate and increase storage usage on the Aurora cluster. Monitor the `ReplicationSlotDiskUsage` [Amazon CloudWatch](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html) metric for your Aurora cluster.
 
 ### Step 2: Build and register the Debezium plugin
 
@@ -591,7 +589,7 @@ SELECT pg_drop_replication_slot('debezium_slot');
 DROP PUBLICATION dbz_publication;
 ```
 
-> **Important:** If you plan to redeploy the pipeline later, you do not need to drop the replication slot and publication. However, the replication slot continues to retain WAL segments while the connector is not running, which can increase storage usage on the Aurora cluster. The MSK cluster is the largest cost component of this solution and cannot be paused - it can only be deleted and recreated.
+> **Important:** The replication slot (`debezium_slot`) was created automatically by Debezium. If you plan to redeploy the pipeline later, you do not need to drop the slot and publication. However, the replication slot continues to retain WAL segments while the connector is not running, which can increase storage usage on the Aurora cluster. The MSK cluster is the largest cost component of this solution and cannot be paused - it can only be deleted and recreated.
 
 ## Conclusion
 

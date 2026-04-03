@@ -150,8 +150,7 @@ CREATE TABLE public.products (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Create replication slot and publication for Debezium
-SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
+-- Create publication for Debezium (the replication slot is created automatically by Debezium)
 CREATE PUBLICATION dbz_publication FOR TABLE public.orders, public.products;
 ```
 
