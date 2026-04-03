@@ -293,9 +293,36 @@ The MSK cluster requires specific configuration to support both the Debezium con
 - **Topic auto-creation** - A custom MSK configuration sets `auto.create.topics.enable=true`. Without this, Debezium fails with `UNKNOWN_TOPIC_OR_PARTITION` errors because the target topics do not exist when the connector first starts.
 - **Cluster resource policy** - A [resource-based policy](https://docs.aws.amazon.com/firehose/latest/dev/writing-with-msk.html) grants the `firehose.amazonaws.com` service principal permission to call `kafka:CreateVpcConnection`.
 
-### Step 5: Grant Lake Formation permissions and apply MSK cluster policy
+### Step 5: Enable MSK VPC connectivity, grant Lake Formation permissions, and apply MSK cluster policy
 
-Before Firehose can write to S3 Tables, you must grant the Firehose IAM role permissions through [AWS Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/what-is-lake-formation.html). S3 Tables uses a sub-catalog format for the `CatalogId` parameter, which differs from the standard [AWS Glue Data Catalog](https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html). These permissions require a [data lake administrator](https://docs.aws.amazon.com/lake-formation/latest/dg/initial-lf-config.html#create-data-lake-admin) identity and are not managed through CDK.
+After the CDK deployment completes, enable [multi-VPC private connectivity](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html) with IAM on the MSK cluster. Firehose requires this to create an [AWS PrivateLink](https://docs.aws.amazon.com/vpc/latest/privatelink/what-is-privatelink.html) endpoint to the MSK brokers. This setting cannot be configured during cluster creation and must be applied as an update, which triggers a rolling broker restart (approximately 20-30 minutes).
+
+```bash
+# Get the cluster ARN and current version from the CdcMskCluster stack outputs
+MSK_ARN=<msk-cluster-arn>
+CLUSTER_VERSION=$(aws kafka describe-cluster-v2 \
+  --cluster-arn $MSK_ARN \
+  --region <your-region> \
+  --query 'ClusterInfo.CurrentVersion' --output text)
+
+# Enable VPC connectivity with IAM
+aws kafka update-connectivity \
+  --cluster-arn $MSK_ARN \
+  --current-version $CLUSTER_VERSION \
+  --connectivity-info '{"VpcConnectivity":{"ClientAuthentication":{"Sasl":{"Iam":{"Enabled":true}}}}}' \
+  --region <your-region>
+```
+
+Wait for the cluster state to return to `ACTIVE` before proceeding:
+
+```bash
+aws kafka describe-cluster-v2 \
+  --cluster-arn $MSK_ARN \
+  --region <your-region> \
+  --query 'ClusterInfo.State'
+```
+
+Next, grant the Firehose IAM role permissions through [AWS Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/what-is-lake-formation.html). S3 Tables uses a sub-catalog format for the `CatalogId` parameter, which differs from the standard [AWS Glue Data Catalog](https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html). These permissions require a [data lake administrator](https://docs.aws.amazon.com/lake-formation/latest/dg/initial-lf-config.html#create-data-lake-admin) identity.
 
 Grant database-level and table-level permissions to the Firehose role:
 
