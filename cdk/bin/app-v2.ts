@@ -8,7 +8,6 @@ import { MskConnectIamStack } from '../lib/v2/2-msk-connect-iam-stack';
 import { S3TablesStack } from '../lib/v2/3-s3-tables-stack';
 import { LambdaTransformStack } from '../lib/v2/4-lambda-transform-stack';
 import { FirehoseRoleStack } from '../lib/v2/5-firehose-role-stack';
-import { LakeFormationStack } from '../lib/v2/6-lakeformation-stack';
 import { FirehoseStack } from '../lib/v2/7-firehose-stack';
 import { CONFIG } from '../lib/v2/config';
 
@@ -42,23 +41,23 @@ const firehoseRole = new FirehoseRoleStack(app, 'CdcFirehoseRole', {
 firehoseRole.addDependency(msk);
 firehoseRole.addDependency(lambda);
 
-// 6. Lake Formation + MSK cluster resource policy
-const lf = new LakeFormationStack(app, 'CdcLakeFormation', {
-  env,
-  firehoseRoleArn: firehoseRole.roleArn,
-  mskClusterArn: msk.clusterArn,
-});
-lf.addDependency(firehoseRole);
-lf.addDependency(s3Tables);
+// 6. Lake Formation permissions + MSK cluster resource policy
+// These are created via CLI (not CDK) because:
+//   - Lake Formation permissions on S3 Tables sub-catalogs require a data lake
+//     administrator identity, which CDK custom resources cannot assume.
+//   - MSK cluster resource policy grants the Firehose service principal permission
+//     to create VPC connections.
+// See the walkthrough in the blog post for the CLI commands.
 
-// 7. Firehose delivery stream (MSK → S3 Tables)
+// 7. Firehose delivery stream (MSK -> S3 Tables)
 const firehose = new FirehoseStack(app, 'CdcFirehose', {
   env,
   roleArn: firehoseRole.roleArn,
   mskClusterArn: msk.clusterArn,
   lambdaArn: lambda.functionArn,
 });
-firehose.addDependency(lf);
+firehose.addDependency(firehoseRole);
+firehose.addDependency(s3Tables);
 
 // ---- cdk-nag suppressions with justifications ----
 
@@ -85,13 +84,6 @@ NagSuppressions.addStackSuppressions(lambda, [
 // Ref: https://docs.aws.amazon.com/firehose/latest/dev/controlling-access.html#using-s3-tables
 NagSuppressions.addStackSuppressions(firehoseRole, [
   { id: 'AwsSolutions-IAM5', reason: 'Firehose IAM role requires broad permissions for Glue (database/*), LakeFormation (GetDataAccess), S3 (Iceberg data files), EC2 (VPC networking), and MSK (dynamic topics/groups). AWS docs prescribe these wildcards. Role scoped to firehose.amazonaws.com. Ref: https://docs.aws.amazon.com/firehose/latest/dev/controlling-access.html#using-s3-tables' },
-], true);
-
-// CdcLakeFormation: Custom resource wildcards and managed policy
-NagSuppressions.addStackSuppressions(lf, [
-  { id: 'AwsSolutions-IAM4', reason: 'AwsCustomResource Lambda uses AWSLambdaBasicExecutionRole for CloudWatch Logs.' },
-  { id: 'AwsSolutions-IAM5', reason: 'AwsCustomResource requires Resource:* for LakeFormation and Kafka SDK calls.' },
-  { id: 'AwsSolutions-L1', reason: 'AwsCustomResource Lambda runtime is managed by CDK and cannot be overridden.' },
 ], true);
 
 // CdcFirehose: SSE not applicable for MSK-sourced streams
