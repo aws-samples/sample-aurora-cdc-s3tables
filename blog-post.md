@@ -539,37 +539,39 @@ With data delivered to S3 Tables, you can query the Iceberg tables using [Amazon
 Open the Athena console, select the **AwsDataCatalog** data source, and run the following queries:
 
 ```sql
-SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders";
-SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."products";
+SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."products" LIMIT 10;
+SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders" LIMIT 10;
 ```
 
-Replace `<table-bucket-name>` with your S3 table bucket name. You should see the 3 records in each table that you inserted in Step 8.
+Replace `<table-bucket-name>` with your S3 table bucket name. You should see the records from the initial snapshot that Debezium captured when the connector started.
+
+Now test that update and delete operations propagate correctly. Run the following statements in Aurora:
+
+```sql
+-- Insert new records
+INSERT INTO public.products (product_name, category, price, stock_quantity)
+VALUES ('Bluetooth Speaker', 'Electronics', 129.99, 90), ('Standing Desk', 'Furniture', 799.99, 20);
+
+INSERT INTO public.orders (customer_id, order_date, total_amount, status)
+VALUES (201, '2026-04-03', 149.99, 'NEW'), (202, '2026-04-03', 249.50, 'NEW'), (203, '2026-04-03', 79.90, 'NEW');
+
+-- Update existing records
+UPDATE public.products SET stock_quantity = 30, price = 549.99 WHERE product_name = 'Ergonomic Chair';
+UPDATE public.orders SET status = 'DELIVERED' WHERE order_id = 201;
+
+-- Delete a record
+DELETE FROM public.products WHERE product_name = 'Test Widget';
+```
+
+Wait for the changes to propagate through the pipeline, then query Athena again. The following figure shows the results of querying both tables after the insert, update, and delete operations have been applied.
 
 *Figure 5. Athena query results showing CDC operations in the products table (top) and orders table (bottom). Red annotations indicate deleted records, yellow indicates updated records, and green indicates newly inserted records.*
 
 ![Athena Results](screenshots/orders_products_highlighted_stacked.png)
 
-Now test that update and delete operations propagate correctly. Run the following statements in Aurora:
+In the products table, the record for Test Widget (product_id 100) has been removed by the delete operation. The Ergonomic Chair, Headphones, and Desk Lamp rows reflect the updated values. The Bluetooth Speaker and Standing Desk rows are newly inserted records. In the orders table, the same pattern is visible - updated records appear with their new status values, and newly inserted orders appear at the bottom.
 
-```sql
--- Update an order status
-UPDATE public.orders SET status = 'delivered' WHERE order_id = 2;
-
--- Delete a product
-DELETE FROM public.products WHERE product_id = 3;
-```
-
-Wait for the changes to propagate through the pipeline, then query Athena again:
-
-```sql
--- Verify the update: order_id 2 should now show 'delivered'
-SELECT order_id, status FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders";
-
--- Verify the delete: product_id 3 (Coffee Maker) should be removed
-SELECT product_id, product_name FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."products";
-```
-
-The orders table should show `delivered` for order 2, and the products table should contain only 2 records (Wireless Headphones and Running Shoes). This confirms that the pipeline correctly handles all three CDC operation types: inserts, updates, and deletes.
+This confirms that the pipeline correctly handles all three CDC operation types: inserts, updates, and deletes are captured from the Aurora WAL by Debezium, routed through the single MSK topic, transformed by the Lambda function, and applied as row-level Iceberg operations by Firehose.
 
 Because S3 Tables provides automatic [compaction](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-compaction.html) and [snapshot management](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-snapshots.html) for Iceberg tables, you do not need to run manual maintenance operations. S3 Tables handles compaction of small data files and expiration of old snapshots automatically.
 
