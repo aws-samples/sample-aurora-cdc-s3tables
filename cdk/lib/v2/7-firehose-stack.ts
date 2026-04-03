@@ -29,7 +29,7 @@ export class FirehoseStack extends cdk.Stack {
         topicName: 'aurora.cdc.all-tables',
         authenticationConfiguration: {
           roleArn: props.roleArn,
-          connectivity: 'PRIVATE',
+          connectivity: 'PUBLIC',
         },
       },
       icebergDestinationConfiguration: {

@@ -33,7 +33,7 @@ The data flows through the following five stages:
 
 2. **Debezium to Amazon MSK** - The Debezium worker serializes each change as a JSON-encoded Kafka message and publishes it to the MSK cluster on port 9092. The `ByLogicalTableRouter` SMT reroutes events from all tables (for example, `aurora.cdc.public.orders` and `aurora.cdc.public.products`) into a single topic (`aurora.cdc.all-tables`). Each message retains the original source table name in the Debezium envelope.
 
-3. **Amazon MSK to Amazon Data Firehose** - Firehose connects to the MSK cluster using [IAM access control](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html) over an [AWS PrivateLink](https://docs.aws.amazon.com/vpc/latest/privatelink/what-is-privatelink.html) connection. Traffic stays within the AWS network. Firehose continuously polls the `aurora.cdc.all-tables` topic for new messages.
+3. **Amazon MSK to Amazon Data Firehose** - Firehose connects to the MSK cluster using [IAM access control](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html). Firehose continuously polls the `aurora.cdc.all-tables` topic for new messages.
 
 4. **Firehose to Lambda transform** - For each batch of records, Firehose invokes the Lambda function synchronously. The function decodes the Kafka message, flattens the Debezium envelope, and sets `otfMetadata` routing with the destination table name and operation type (`insert`, `update`, or `delete`).
 
@@ -276,53 +276,25 @@ When prompted, review the [IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide
 
 | Stack | What it creates |
 |-------|----------------|
-| `CdcMskCluster` | Amazon MSK cluster (2x kafka.m5.large brokers) with dual authentication ([IAM](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html) for Firehose, unauthenticated for Debezium), [multi-VPC private connectivity](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html), custom configuration with `auto.create.topics.enable=true`, security groups with ingress rules for Aurora and MSK Connect workers |
+| `CdcMskCluster` | Amazon MSK cluster (2x kafka.m5.large brokers) with dual authentication ([IAM](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html) for Firehose, unauthenticated for Debezium), custom configuration with `auto.create.topics.enable=true`, security groups with ingress rules for Aurora and MSK Connect workers |
 | `CdcMskConnectIam` | MSK Connect service execution role, plugin S3 bucket with [server-side encryption](https://docs.aws.amazon.com/AmazonS3/latest/userguide/serv-side-encryption.html) (SSE-S3) and SSL-only bucket policy, [Amazon CloudWatch Logs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html) group for connector logs |
 | `CdcDebeziumConnector` | Debezium PostgreSQL connector with `ByLogicalTableRouter` SMT routing all tables to `aurora.cdc.all-tables`, provisioned capacity (2 MCU x 2 workers) |
 | `CdcS3Tables` | S3 table bucket, `aurora_cdc` namespace, two Iceberg tables (`orders`, `products`) with column schemas |
 | `CdcLambdaTransform` | Lambda function for CDC event transformation and multi-table routing |
 | `CdcFirehoseRole` | Firehose IAM role with permissions for Amazon MSK, S3 Tables, [AWS Glue Data Catalog](https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html), [AWS Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/what-is-lake-formation.html), VPC networking, and Lambda invocation |
-| `CdcFirehose` | Firehose delivery stream with MSK as source (private connectivity via AWS PrivateLink), Lambda processing, Apache Iceberg Tables as destination with two table configurations, and S3 backup bucket for failed records |
+| `CdcFirehose` | Firehose delivery stream with MSK as source (IAM authentication), Lambda processing, Apache Iceberg Tables as destination with two table configurations, and S3 backup bucket for failed records |
 
 The MSK cluster takes approximately 25 minutes to create. The Debezium connector takes approximately 5 minutes after the cluster is ready. You can monitor the deployment progress in the [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html) console.
 
 The MSK cluster requires specific configuration to support both the Debezium connector and Firehose:
 
 - **Dual authentication** - [IAM authentication](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html) is enabled for Firehose, and unauthenticated access is kept for Debezium. MSK Connect workers use the PLAINTEXT protocol to communicate with brokers, as documented in the [MSK Connect getting started tutorial](https://docs.aws.amazon.com/msk/latest/developerguide/mkc-tutorial-setup.html). This requires the cluster encryption setting `TLS_PLAINTEXT`, which supports both TLS (for Firehose via IAM) and PLAINTEXT (for MSK Connect).
-- **VPC connectivity** - [Multi-VPC private connectivity](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html) with IAM is enabled so that Firehose can create an AWS PrivateLink endpoint to the MSK brokers.
 - **Topic auto-creation** - A custom MSK configuration sets `auto.create.topics.enable=true`. Without this, Debezium fails with `UNKNOWN_TOPIC_OR_PARTITION` errors because the target topics do not exist when the connector first starts.
-- **Cluster resource policy** - A [resource-based policy](https://docs.aws.amazon.com/firehose/latest/dev/writing-with-msk.html) grants the `firehose.amazonaws.com` service principal permission to call `kafka:CreateVpcConnection`.
+- **Cluster resource policy** - A [resource-based policy](https://docs.aws.amazon.com/firehose/latest/dev/writing-with-msk.html) grants the `firehose.amazonaws.com` service principal permission to call `kafka:GetBootstrapBrokers` and `kafka:DescribeClusterV2`. This is applied as a CLI step after deployment (Step 5).
 
-### Step 5: Enable MSK VPC connectivity, grant Lake Formation permissions, and apply MSK cluster policy
+### Step 5: Grant Lake Formation permissions and apply MSK cluster policy
 
-After the CDK deployment completes, enable [multi-VPC private connectivity](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html) with IAM on the MSK cluster. Firehose requires this to create an [AWS PrivateLink](https://docs.aws.amazon.com/vpc/latest/privatelink/what-is-privatelink.html) endpoint to the MSK brokers. This setting cannot be configured during cluster creation and must be applied as an update, which triggers a rolling broker restart (approximately 20-30 minutes).
-
-```bash
-# Get the cluster ARN and current version from the CdcMskCluster stack outputs
-MSK_ARN=<msk-cluster-arn>
-CLUSTER_VERSION=$(aws kafka describe-cluster-v2 \
-  --cluster-arn $MSK_ARN \
-  --region <your-region> \
-  --query 'ClusterInfo.CurrentVersion' --output text)
-
-# Enable VPC connectivity with IAM
-aws kafka update-connectivity \
-  --cluster-arn $MSK_ARN \
-  --current-version $CLUSTER_VERSION \
-  --connectivity-info '{"VpcConnectivity":{"ClientAuthentication":{"Sasl":{"Iam":{"Enabled":true}}}}}' \
-  --region <your-region>
-```
-
-Wait for the cluster state to return to `ACTIVE` before proceeding:
-
-```bash
-aws kafka describe-cluster-v2 \
-  --cluster-arn $MSK_ARN \
-  --region <your-region> \
-  --query 'ClusterInfo.State'
-```
-
-Next, grant the Firehose IAM role permissions through [AWS Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/what-is-lake-formation.html). S3 Tables uses a sub-catalog format for the `CatalogId` parameter, which differs from the standard [AWS Glue Data Catalog](https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html). These permissions require a [data lake administrator](https://docs.aws.amazon.com/lake-formation/latest/dg/initial-lf-config.html#create-data-lake-admin) identity.
+After the CDK deployment completes, grant the Firehose IAM role permissions through [AWS Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/what-is-lake-formation.html). S3 Tables uses a sub-catalog format for the `CatalogId` parameter, which differs from the standard [AWS Glue Data Catalog](https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html). These permissions require a [data lake administrator](https://docs.aws.amazon.com/lake-formation/latest/dg/initial-lf-config.html#create-data-lake-admin) identity.
 
 Grant database-level and table-level permissions to the Firehose role:
 
@@ -355,7 +327,7 @@ aws kafka put-cluster-policy \
     "Statement": [{
       "Effect": "Allow",
       "Principal": {"Service": "firehose.amazonaws.com"},
-      "Action": ["kafka:CreateVpcConnection", "kafka:GetBootstrapBrokers", "kafka:DescribeClusterV2"],
+      "Action": ["kafka:GetBootstrapBrokers", "kafka:DescribeClusterV2"],
       "Resource": "<msk-cluster-arn>"
     }]
   }'
@@ -598,7 +570,7 @@ In this post, we showed you how to build a near real-time CDC pipeline from Auro
 - **Lambda-based multi-table routing** - Using `otfMetadata` to direct each record to the correct Iceberg table, enabling a single Firehose stream to perform inserts, updates, and deletes across multiple destination tables.
 - **Fully managed pipeline** - MSK Connect runs Debezium without infrastructure management, and Firehose handles delivery with automatic retries and error handling. S3 Tables manages Iceberg snapshot management and compaction automatically.
 - **CDC semantics preserved** - The Lambda transform maps Debezium operations to Iceberg insert, update, and delete operations, keeping the lakehouse synchronized with the source database.
-- **Private connectivity** - Firehose connects to MSK via AWS PrivateLink, keeping all traffic within the AWS network.
+- **Private connectivity** - Firehose connects to MSK using IAM authentication with TLS encryption, keeping data secure in transit.
 - **Governed access** - Lake Formation provides centralized access control over the Iceberg tables, enabling fine-grained permissions for downstream consumers.
 - **Cross-domain analytics** - Data from multiple isolated Aurora clusters can be unified in a single S3 Tables namespace, enabling joins and analytics across datasets that were previously siloed.
 - **Infrastructure as code** - Six AWS CDK stacks deploy the core pipeline infrastructure, with Lake Formation permissions, MSK cluster policy, and Debezium connector configured through documented CLI steps.
