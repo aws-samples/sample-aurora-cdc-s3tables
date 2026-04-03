@@ -14,7 +14,7 @@ The following diagram shows the architecture of the CDC pipeline.
 
 *Figure 1. CDC pipeline architecture from Aurora PostgreSQL to Amazon S3 Tables.*
 
-![Architecture Diagram](aurora-cdc-s3tables-architecture.png)
+![Architecture Diagram](screenshots/aurora-cdc-s3tables-architecture.png)
 
 The pipeline consists of six components:
 
@@ -284,6 +284,18 @@ When prompted, review the [IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide
 
 The MSK cluster takes approximately 25 minutes to create. The Debezium connector takes approximately 5 minutes after the cluster is ready. You can monitor the deployment progress in the [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html) console.
 
+After the deployment completes, you can verify the resources in the AWS console. The S3 table bucket shows the two Iceberg tables in the `aurora_cdc` namespace.
+
+*Figure 2. S3 table bucket showing the orders and products Iceberg tables in the aurora_cdc namespace.*
+
+![S3 Table Bucket](screenshots/aurora-cdc-table-bucket.png)
+
+The Firehose delivery stream shows the MSK source, Lambda transformation, and Apache Iceberg Tables destination.
+
+*Figure 3. Amazon Data Firehose delivery stream with MSK source, Lambda transformation, and Apache Iceberg Tables destination.*
+
+![Firehose Console](screenshots/firehose-console.png)
+
 > **Note:** The total deployment time for the full pipeline is approximately 60-70 minutes: CDK stacks (~30 minutes, dominated by MSK cluster creation), VPC connectivity update in Step 5 (~20-30 minutes, rolling broker restart), and Debezium connector creation in Step 6 (~5 minutes). Steps 5 and 6 are performed after the CDK deployment completes.
 
 The MSK cluster requires specific configuration to support both the Debezium connector and Firehose:
@@ -445,7 +457,13 @@ aws kafkaconnect list-connectors --region <your-region> \
   --output table
 ```
 
-The connector state should show `RUNNING`. Check the CloudWatch Logs to confirm the snapshot completed:
+The connector state should show `RUNNING`, as shown in the following figure.
+
+*Figure 4. Debezium connector running on Amazon MSK Connect.*
+
+![MSK Connect](screenshots/msk-connect.png)
+
+Check the CloudWatch Logs to confirm the snapshot completed:
 
 ```bash
 aws logs tail /aws/msk-connect/aurora-cdc-debezium --follow --region <your-region>
@@ -527,7 +545,9 @@ SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."products";
 
 Replace `<table-bucket-name>` with your S3 table bucket name. You should see the 3 records in each table that you inserted in Step 8.
 
-*Figure 2. Athena query results showing orders delivered through the CDC pipeline.*
+*Figure 5. Athena query results showing CDC operations in the products table (top) and orders table (bottom). Red annotations indicate deleted records, yellow indicates updated records, and green indicates newly inserted records.*
+
+![Athena Results](screenshots/orders_products_highlighted_stacked.png)
 
 Now test that update and delete operations propagate correctly. Run the following statements in Aurora:
 
@@ -550,8 +570,6 @@ SELECT product_id, product_name FROM "s3tablescatalog/<table-bucket-name>"."auro
 ```
 
 The orders table should show `delivered` for order 2, and the products table should contain only 2 records (Wireless Headphones and Running Shoes). This confirms that the pipeline correctly handles all three CDC operation types: inserts, updates, and deletes.
-
-*Figure 3. Athena query results confirming update and delete operations propagated through the pipeline.*
 
 Because S3 Tables provides automatic [compaction](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-compaction.html) and [snapshot management](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance-snapshots.html) for Iceberg tables, you do not need to run manual maintenance operations. S3 Tables handles compaction of small data files and expiration of old snapshots automatically.
 
