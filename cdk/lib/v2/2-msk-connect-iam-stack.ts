@@ -1,6 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import { CONFIG } from './config';
@@ -11,11 +10,10 @@ export class MskConnectIamStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const pluginBucket = new s3.Bucket(this, 'PluginBucket', {
-      bucketName: CONFIG.debeziumPluginBucket,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
+    // The Debezium plugin bucket is created manually by the user (or they can
+    // leverage an existing metadata management bucket). The bucket ARN is
+    // referenced here for the S3 read policy on the MSK Connect service role.
+    const pluginBucketArn = `arn:aws:s3:::${CONFIG.debeziumPluginBucket}`;
 
     const role = new iam.Role(this, 'ServiceRole', {
       roleName: 'msk-connect-service-role',
@@ -37,7 +35,7 @@ export class MskConnectIamStack extends cdk.Stack {
     }));
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['s3:GetObject', 's3:ListBucket'],
-      resources: [pluginBucket.bucketArn, `${pluginBucket.bucketArn}/*`],
+      resources: [pluginBucketArn, `${pluginBucketArn}/*`],
     }));
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],

@@ -5,7 +5,6 @@ import { Aspects } from 'aws-cdk-lib';
 import { AwsSolutionsChecks, NagSuppressions } from 'cdk-nag';
 import { MskClusterStack } from '../lib/v2/1-msk-cluster-stack';
 import { MskConnectIamStack } from '../lib/v2/2-msk-connect-iam-stack';
-import { DebeziumConnectorStack } from '../lib/v2/2b-debezium-connector-stack';
 import { S3TablesStack } from '../lib/v2/3-s3-tables-stack';
 import { LambdaTransformStack } from '../lib/v2/4-lambda-transform-stack';
 import { FirehoseRoleStack } from '../lib/v2/5-firehose-role-stack';
@@ -19,26 +18,16 @@ const env = { account: CONFIG.account, region: CONFIG.region };
 // 1. MSK Cluster (with IAM auth, VPC IAM connectivity, auto.create.topics.enable)
 const msk = new MskClusterStack(app, 'CdcMskCluster', { env });
 
-// 2a. MSK Connect IAM (role, plugin bucket, logs)
+// 2. MSK Connect IAM (role, logs)
 const mskIam = new MskConnectIamStack(app, 'CdcMskConnectIam', { env });
 
-// 2b. Debezium Connector (MSK Connect)
-//     NOTE: customPluginArn and workerConfigArn must be created first via CLI
-//     (build-debezium-plugin.sh), then passed here. These are not CDK-managed
-//     because the plugin ZIP must be built and uploaded to S3 manually.
-const debezium = new DebeziumConnectorStack(app, 'CdcDebeziumConnector', {
-  env,
-  mskClusterArn: msk.clusterArn,
-  mskBootstrapServers: CONFIG.mskBootstrapServers,
-  mskSecurityGroupId: msk.securityGroupId,
-  serviceRoleArn: mskIam.serviceRoleArn,
-  customPluginArn: CONFIG.debeziumPluginArn,
-  workerConfigArn: CONFIG.debeziumWorkerConfigArn,
-});
-debezium.addDependency(msk);
-debezium.addDependency(mskIam);
+// Debezium Connector is created via CLI (not CDK-managed).
+// The Debezium plugin ZIP must be built, uploaded to S3, and registered as a
+// custom plugin before creating the connector. Users can leverage their existing
+// metadata management bucket for the plugin upload, or create a new one.
+// See the walkthrough in the blog post for detailed CLI steps.
 
-// 3. S3 Tables (bucket, namespace, 3 Iceberg tables)
+// 3. S3 Tables (bucket, namespace, Iceberg tables)
 const s3Tables = new S3TablesStack(app, 'CdcS3Tables', { env });
 
 // 4. Lambda Transform

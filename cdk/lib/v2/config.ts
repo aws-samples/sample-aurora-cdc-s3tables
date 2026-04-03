@@ -22,16 +22,11 @@ export const CONFIG = {
   mskInstanceType: 'kafka.m5.large',
   mskBrokerCount: 2,
   mskEbsVolumeSize: 100,
-  mskBootstrapServers: '<bootstrap-servers>', // Available after MSK cluster is created
 
   // Debezium / MSK Connect
-  // NOTE: Plugin and worker config must be created via CLI before deploying the connector stack.
-  //   1. Build and upload plugin ZIP (see README Step 2)
-  //   2. Create custom plugin: aws kafkaconnect create-custom-plugin ...
-  //   3. Create worker config: aws kafkaconnect create-worker-configuration ...
-  //   4. Update these ARNs below
-  debeziumPluginArn: '<custom-plugin-arn>',
-  debeziumWorkerConfigArn: '<worker-configuration-arn>',
+  // The plugin bucket is created manually by the user before deploying.
+  // Users can leverage their existing metadata management bucket as applicable,
+  // or create a new one for the Debezium plugin ZIP.
   debeziumPluginBucket: '<your-plugin-bucket-name>',
   debeziumTopicPrefix: 'aurora.cdc',
   debeziumTables: 'public.orders,public.products',
