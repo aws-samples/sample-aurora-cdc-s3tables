@@ -286,6 +286,8 @@ When prompted, review the [IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide
 
 The MSK cluster takes approximately 25 minutes to create. The Debezium connector takes approximately 5 minutes after the cluster is ready. You can monitor the deployment progress in the [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html) console.
 
+> **Note:** The total deployment time for the full pipeline is approximately 60-70 minutes: CDK stacks (~30 minutes, dominated by MSK cluster creation), VPC connectivity update in Step 5 (~20-30 minutes, rolling broker restart), and Debezium connector creation in Step 6 (~5 minutes). Steps 5 and 6 are performed after the CDK deployment completes.
+
 The MSK cluster requires specific configuration to support both the Debezium connector and Firehose:
 
 - **Dual authentication** - [IAM authentication](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html) is enabled for Firehose, and unauthenticated access is kept for Debezium. MSK Connect workers use the PLAINTEXT protocol to communicate with brokers, as documented in the [MSK Connect getting started tutorial](https://docs.aws.amazon.com/msk/latest/developerguide/mkc-tutorial-setup.html). This requires the cluster encryption setting `TLS_PLAINTEXT`, which supports both TLS (for Firehose via IAM) and PLAINTEXT (for MSK Connect).
