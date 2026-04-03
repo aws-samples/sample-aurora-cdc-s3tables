@@ -28,7 +28,9 @@ export class FirehoseRoleStack extends cdk.Stack {
     role.addToPolicy(new iam.PolicyStatement({
       actions: [
         'kafka-cluster:Connect', 'kafka-cluster:DescribeCluster', 'kafka-cluster:DescribeTopic',
-        'kafka-cluster:DescribeTopicDynamicConfiguration', 'kafka-cluster:ReadData', 'kafka-cluster:DescribeGroup',
+        'kafka-cluster:DescribeTopicDynamicConfiguration', 'kafka-cluster:ReadData',
+        'kafka-cluster:DescribeGroup', 'kafka-cluster:AlterGroup',
+        'kafka-cluster:CreateTopic', 'kafka-cluster:WriteData',
       ],
       resources: [
         props.mskClusterArn,
