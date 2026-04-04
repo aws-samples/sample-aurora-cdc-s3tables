@@ -545,6 +545,16 @@ SELECT * FROM "s3tablescatalog/<table-bucket-name>"."aurora_cdc"."orders" LIMIT 
 
 Replace `<table-bucket-name>` with your S3 table bucket name. You should see the records from the initial snapshot that Debezium captured when the connector started.
 
+The following figures show the initial state of both tables as queried through Athena. At this point, the products table contains seven records and the orders table contains seven records, all captured during the Debezium initial snapshot.
+
+*Figure 5. Initial state of the products table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
+
+![Products Initial](screenshots/products-initial.png)
+
+*Figure 6. Initial state of the orders table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
+
+![Orders Initial](screenshots/orders-initial.png)
+
 Now test that update and delete operations propagate correctly. Run the following statements in Aurora:
 
 ```sql
@@ -563,13 +573,19 @@ UPDATE public.orders SET status = 'DELIVERED' WHERE order_id = 201;
 DELETE FROM public.products WHERE product_name = 'Test Widget';
 ```
 
-Wait for the changes to propagate through the pipeline, then query Athena again. The following figure shows the results of querying both tables after the insert, update, and delete operations have been applied.
+Wait for the changes to propagate through the pipeline, then query Athena again. The following figures show the results after the insert, update, and delete operations have been applied.
 
-*Figure 5. Athena query results showing CDC operations in the products table (top) and orders table (bottom). Red annotations indicate deleted records, yellow indicates updated records, and green indicates newly inserted records.*
+In the products table, the Test Widget record (product_id 100) is no longer present - it was removed by the delete operation. The Ergonomic Chair row now reflects the updated price (549.99) and stock quantity (30). Two new records, Bluetooth Speaker and Standing Desk, appear with a later `created_at` timestamp, confirming they were inserted after the initial snapshot.
 
-![Athena Results](screenshots/orders_products_highlighted_stacked.png)
+*Figure 7. Products table after CDC operations. The Ergonomic Chair, Headphones, and Desk Lamp rows reflect updated values. Bluetooth Speaker and Standing Desk are newly inserted records. The Test Widget record has been removed by the delete operation.*
 
-In the products table, the record for Test Widget (product_id 100) has been removed by the delete operation. The Ergonomic Chair, Headphones, and Desk Lamp rows reflect the updated values. The Bluetooth Speaker and Standing Desk rows are newly inserted records. In the orders table, the same pattern is visible - updated records appear with their new status values, and newly inserted orders appear at the bottom.
+![Products CDC](screenshots/products-cdc.png)
+
+In the orders table, order 100 now shows a status of SHIPPED and order 201 shows DELIVERED, reflecting the update operations. Three new orders (301, 302, 303) appear with status NEW and a later timestamp, confirming they were inserted after the initial load.
+
+*Figure 8. Orders table after CDC operations. Orders 100 and 201 reflect updated status values. Orders 301, 302, and 303 are newly inserted records.*
+
+![Orders CDC](screenshots/order-cdc.png)
 
 This confirms that the pipeline correctly handles all three CDC operation types: inserts, updates, and deletes are captured from the Aurora WAL by Debezium, routed through the single MSK topic, transformed by the Lambda function, and applied as row-level Iceberg operations by Firehose.
 
