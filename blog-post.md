@@ -12,9 +12,9 @@ In this post, we show you how to build a near real-time change data capture (CDC
 
 The following diagram shows the architecture of the CDC pipeline.
 
-*Figure 1. CDC pipeline architecture from Aurora PostgreSQL to Amazon S3 Tables.*
-
 ![Architecture Diagram](screenshots/aurora-cdc-s3tables-architecture.png)
+
+*Figure 1. CDC pipeline architecture from Aurora PostgreSQL to Amazon S3 Tables.*
 
 The pipeline consists of six components:
 
@@ -286,15 +286,15 @@ The MSK cluster takes approximately 25 minutes to create. The Debezium connector
 
 After the deployment completes, you can verify the resources in the AWS console. The S3 table bucket shows the two Iceberg tables in the `aurora_cdc` namespace.
 
-*Figure 2. S3 table bucket showing the orders and products Iceberg tables in the aurora_cdc namespace.*
-
 ![S3 Table Bucket](screenshots/aurora-cdc-table-bucket.png)
+
+*Figure 2. S3 table bucket showing the orders and products Iceberg tables in the aurora_cdc namespace.*
 
 The Firehose delivery stream shows the MSK source, Lambda transformation, and Apache Iceberg Tables destination.
 
-*Figure 3. Amazon Data Firehose delivery stream with MSK source, Lambda transformation, and Apache Iceberg Tables destination.*
-
 ![Firehose Console](screenshots/firehose-console.png)
+
+*Figure 3. Amazon Data Firehose delivery stream with MSK source, Lambda transformation, and Apache Iceberg Tables destination.*
 
 > **Note:** The total deployment time for the full pipeline is approximately 60-70 minutes: CDK stacks (~30 minutes, dominated by MSK cluster creation), VPC connectivity update in Step 5 (~20-30 minutes, rolling broker restart), and Debezium connector creation in Step 6 (~5 minutes). Steps 5 and 6 are performed after the CDK deployment completes.
 
@@ -459,9 +459,9 @@ aws kafkaconnect list-connectors --region <your-region> \
 
 The connector state should show `RUNNING`, as shown in the following figure.
 
-*Figure 4. Debezium connector running on Amazon MSK Connect.*
-
 ![MSK Connect](screenshots/msk-connect.png)
+
+*Figure 4. Debezium connector running on Amazon MSK Connect.*
 
 Check the CloudWatch Logs to confirm the snapshot completed:
 
@@ -547,13 +547,13 @@ Replace `<table-bucket-name>` with your S3 table bucket name. You should see the
 
 The following figures show the initial state of both tables as queried through Athena. At this point, the products table contains seven records and the orders table contains seven records, all captured during the Debezium initial snapshot.
 
-*Figure 5. Initial state of the products table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
-
 ![Products Initial](screenshots/products-initial.png)
 
-*Figure 6. Initial state of the orders table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
+*Figure 5. Initial state of the products table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
 
 ![Orders Initial](screenshots/orders-initial.png)
+
+*Figure 6. Initial state of the orders table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
 
 Now test that update and delete operations propagate correctly. Run the following statements in Aurora:
 
@@ -577,15 +577,15 @@ Wait for the changes to propagate through the pipeline, then query Athena again.
 
 In the products table, the Test Widget record (product_id 100) is no longer present - it was removed by the delete operation. The Ergonomic Chair row now reflects the updated price (549.99) and stock quantity (30). Two new records, Bluetooth Speaker and Standing Desk, appear with a later `created_at` timestamp, confirming they were inserted after the initial snapshot.
 
-*Figure 7. Products table after CDC operations. The Ergonomic Chair, Headphones, and Desk Lamp rows reflect updated values. Bluetooth Speaker and Standing Desk are newly inserted records. The Test Widget record has been removed by the delete operation.*
-
 ![Products CDC](screenshots/products-cdc.png)
+
+*Figure 7. Products table after CDC operations. The Ergonomic Chair, Headphones, and Desk Lamp rows reflect updated values. Bluetooth Speaker and Standing Desk are newly inserted records. The Test Widget record has been removed by the delete operation.*
 
 In the orders table, order 100 now shows a status of SHIPPED and order 201 shows DELIVERED, reflecting the update operations. Three new orders (301, 302, 303) appear with status NEW and a later timestamp, confirming they were inserted after the initial load.
 
-*Figure 8. Orders table after CDC operations. Orders 100 and 201 reflect updated status values. Orders 301, 302, and 303 are newly inserted records.*
-
 ![Orders CDC](screenshots/order-cdc.png)
+
+*Figure 8. Orders table after CDC operations. Orders 100 and 201 reflect updated status values. Orders 301, 302, and 303 are newly inserted records.*
 
 This confirms that the pipeline correctly handles all three CDC operation types: inserts, updates, and deletes are captured from the Aurora WAL by Debezium, routed through the single MSK topic, transformed by the Lambda function, and applied as row-level Iceberg operations by Firehose.
 
