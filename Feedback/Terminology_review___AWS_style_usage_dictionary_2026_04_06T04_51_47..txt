@@ -1,0 +1,51 @@
+# AWS Terminology Analysis Results
+
+I've analyzed your blog post draft against the AWS Style Guide Usage Dictionary. Here are the terminology violations found:
+
+## REQUIRED (Must fix before moving forward to reviews)
+
+**No "Don't use" terms found** - None of the terms in your blog post are marked as prohibited in the dictionary.
+
+## IMPORTANT (Must fix before publication)
+
+### Capitalization/Punctuation Errors
+
+1. **"near real-time" (hyphenated as adjective)**
+   - **Term in post:** "near real-time" used as adjective phrase
+   - **Dictionary entry:** When used as an adjective, should be "near real-time" (with hyphen between real-time only)
+   - **Location:** Opening paragraph - "build a near real-time change data capture (CDC) pipeline"
+   - **Issue:** Missing hyphen in "real-time" when used as compound adjective. Should be "near real-time" with "real-time" hyphenated.
+
+2. **"Real-time" in title**
+   - **Term in post:** "Real-time CDC from Amazon Aurora PostgreSQL"
+   - **Dictionary entry:** Use "real-time" (lowercase) as adjective with hyphen
+   - **Location:** Document title
+   - **Issue:** Incorrect capitalization. Should be lowercase "real-time" unless starting a sentence.
+
+3. **"row-level"**
+   - **Term in post:** "row-level changes" (appears 4 times)
+   - **Dictionary entry:** No specific entry found, but compound adjectives with "level" typically require hyphens
+   - **Location:** Multiple locations throughout document
+   - **Issue:** Correctly hyphenated - no violation.
+
+4. **"time travel"**
+   - **Term in post:** "time travel capabilities" (appears 3 times)
+   - **Dictionary entry:** No specific entry found in dictionary
+   - **Location:** Multiple locations
+   - **Issue:** No violation found in dictionary.
+
+5. **"cross-domain"**
+   - **Term in post:** "cross-domain analytics" (appears 2 times)
+   - **Dictionary entry:** No specific entry found, but follows standard hyphenation for compound adjectives
+   - **Location:** Multiple locations
+   - **Issue:** Correctly hyphenated - no violation.
+
+### Summary
+
+**Primary violation:** The term "near real-time" needs consistent hyphenation. According to the AWS Style Guide:
+- As a **noun**: "near real time" (no hyphens)
+- As an **adjective**: "near real-time" (hyphen in "real-time" only, not between "near" and "real")
+
+**Your usage:** You're using it as an adjective to describe "CDC pipeline," so it should be "near real-time" throughout.
+
+All other terminology (CDC, write-ahead log, WAL, row-level, time travel, cross-domain) appears to be used correctly according to the style guide.

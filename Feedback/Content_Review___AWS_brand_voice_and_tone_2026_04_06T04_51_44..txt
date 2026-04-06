@@ -1,0 +1,154 @@
+# AWS Brand Compliance Review: Real-time CDC from Amazon Aurora PostgreSQL to Apache Iceberg tables in Amazon S3 Tables
+
+## REQUIRED (Must fix before moving forward to reviews)
+
+### Voice violations
+
+**Location: Introduction - Paragraph 1**
+* Current: "Organizations running transactional workloads on Amazon Aurora PostgreSQL-Compatible Edition (Aurora PostgreSQL) often need to make operational data available for analytics without impacting production performance."
+* Issue: Third-person perspective referring to "organizations" instead of addressing readers directly
+* Guidance: Use second-person "you" to address readers directly 
+
+**Location: Introduction - Paragraph 2**
+* Current: "However, organizations still need a reliable way to continuously ingest operational database changes into the lakehouse while preserving transactional performance."
+* Issue: Third-person perspective; not customer-focused
+* Guidance: Use "you" and "your" to speak directly to the reader 
+
+**Location: Throughout document**
+* Current: Multiple instances of third-person constructions ("organizations," "companies," "customers")
+* Issue: Violates second-person addressing requirement
+* Guidance: Reframe to address readers as "you" throughout 
+
+### Customer focus gaps
+
+**Location: Solution overview - Opening**
+* Current: "The pipeline consists of six components:" followed by technical component list
+* Issue: Feature-focused rather than benefit-focused; leads with architecture instead of customer value
+* Guidance: Lead with what customers can achieve, not what was built 
+
+**Location: Data Flow Stages - All stages**
+* Current: Technical descriptions of how data flows between services
+* Issue: Focuses on technical mechanics rather than customer outcomes
+* Guidance: Frame from customer perspective - what they accomplish at each stage 
+
+**Location: Conclusion**
+* Current: "Key benefits include: Single-topic routing reducing cost and complexity..."
+* Issue: Lists features rather than customer outcomes
+* Guidance: Lead with customer benefit, not product features 
+
+### Tone issues
+
+**Location: Introduction - Paragraph 2**
+* Current: "provides purpose-built storage for Apache Iceberg tables with automatic snapshot management and compaction, making it a foundation for a governed lakehouse architecture"
+* Issue: Marketing language ("purpose-built," "foundation") without clear customer benefit
+* Guidance: Focus on customer benefits, avoid marketing hype 
+
+**Location: Walkthrough - Step 2**
+* Current: "Build and register the Debezium plugin"
+* Issue: Command-style instruction without context or benefit
+* Guidance: Professional but conversational; explain why customers take this action 
+
+---
+
+## IMPORTANT (Must fix before publication)
+
+### Style problems
+
+**Location: Introduction - Paragraph 1**
+* Current: "Organizations running transactional workloads on Amazon Aurora PostgreSQL-Compatible Edition (Aurora PostgreSQL) often need to make operational data available for analytics without impacting production performance."
+* Issue: Passive construction; 38-word sentence reduces clarity
+* Guidance: Use active voice; break into shorter sentences (15-20 words average) 
+
+**Location: Solution overview - Paragraph 1**
+* Current: "The pipeline consists of six components:"
+* Issue: Passive voice
+* Guidance: Active voice preferred - "The pipeline uses six components" or better, lead with customer action 
+
+**Location: Data Flow Stages - Stage 3**
+* Current: "Firehose connects to the MSK cluster using IAM access control over an AWS PrivateLink connection"
+* Issue: Passive construction with prepositional phrases
+* Guidance: Simplify to active voice 
+
+**Location: Prerequisites section**
+* Current: List format with passive constructions ("An AWS account with appropriate permissions," "Aurora database credentials stored in AWS Secrets Manager")
+* Issue: Inconsistent structure; some items are noun phrases, others are passive constructions
+* Guidance: Use parallel structure in lists; start each with same part of speech 
+
+**Location: Walkthrough - Multiple steps**
+* Current: Mix of imperative commands and passive descriptions
+* Issue: Inconsistent verb tenses and voice
+* Guidance: Maintain consistent active voice and verb tense throughout 
+
+### Clarity issues
+
+**Location: Introduction - Paragraph 2**
+* Current: "Lakehouse architectures built on Apache Iceberg address these challenges by providing a unified data layer with ACID properties, schema evolution, and time travel capabilities."
+* Issue: Technical jargon without explanation (ACID properties, schema evolution, time travel capabilities)
+* Guidance: Explain technical terms or use simpler alternatives 
+
+**Location: Solution overview - Key design decision**
+* Current: "A key design decision in this architecture is the single-topic routing pattern. Amazon Data Firehose supports only one MSK topic per delivery stream."
+* Issue: Assumes reader understands "single-topic routing pattern" and why it matters
+* Guidance: Explain concepts before using them; lead with customer benefit 
+
+**Location: Debezium Event Transformation**
+* Current: Technical operation codes (c, u, d, r) presented without context
+* Issue: Abbreviations without explanation
+* Guidance: Spell out acronyms on first use; consider global audience 
+
+### Formatting errors
+
+**Location: Walkthrough section**
+* Current: Steps numbered 1-10 with inconsistent depth and detail
+* Issue: Some steps are single sentences, others are multi-paragraph; poor scannability
+* Guidance: Short paragraphs (3-4 sentences max); consistent structure for scannable content 
+
+**Location: Prerequisites section**
+* Current: Bullet list mixing different types of requirements
+* Issue: Not grouped logically; hard to scan
+* Guidance: Group related items; use headers for different requirement categories 
+
+---
+
+## RECOMMENDED (Suggested improvements)
+
+### Enhancement opportunities
+
+**Location: Introduction**
+* Current: Opens with problem statement
+* Issue: Could be stronger with immediate value proposition
+* Guidance: Consider opening with what readers will accomplish, then explain the challenge 
+
+**Location: Solution overview**
+* Current: Lists six components without explaining why this architecture matters
+* Issue: Missing the "so what" - why should readers care about this specific approach
+* Guidance: Add transition explaining customer value before diving into technical details 
+
+**Location: Conclusion**
+* Current: Lists benefits but no clear call-to-action
+* Issue: Doesn't guide readers on next steps
+* Guidance: End with clear next steps or follow-up questions to maintain engagement 
+
+**Location: Throughout**
+* Current: "Amazon Aurora PostgreSQL-Compatible Edition" used repeatedly
+* Issue: Verbose; already established as "Aurora PostgreSQL"
+* Guidance: Use abbreviated form after first reference for concision 
+
+### Accessibility improvements
+
+**Location: Throughout document**
+* Current: Dense technical paragraphs with multiple concepts per sentence
+* Issue: Reading level likely above 8th grade; not globally accessible
+* Guidance: Shorter sentences; break complex concepts into digestible pieces 
+
+**Location: Code examples and technical terms**
+* Current: Technical terminology without consistent explanation
+* Issue: Assumes high technical proficiency; not accessible to all skill levels
+* Guidance: Provide brief context for technical concepts; consider varied audience skill levels 
+
+**Location: Walkthrough section**
+* Current: Command-line instructions without explanation of what they accomplish
+* Issue: Not accessible to readers unfamiliar with these tools
+* Guidance: Add brief explanations of what each command accomplishes and why 
+
+---

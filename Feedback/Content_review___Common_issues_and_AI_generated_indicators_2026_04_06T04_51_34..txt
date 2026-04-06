@@ -1,0 +1,264 @@
+# Content Review Analysis
+
+## Required Issues (Must fix before moving forward to reviews)
+
+### Generic introductory sentences
+
+**Issue 1:**
+"Organizations running transactional workloads on Amazon Aurora PostgreSQL-Compatible Edition (Aurora PostgreSQL) often need to make operational data available for analytics without impacting production performance."
+
+**Explanation:** This opening uses the generic "Organizations [face/need]..." pattern that fails to immediately engage readers with a specific, concrete problem. It's a common AI-generated opening structure.
+
+---
+
+**Issue 2:**
+"However, organizations still need a reliable way to continuously ingest operational database changes into the lakehouse while preserving transactional performance."
+
+**Explanation:** Another instance of the generic "organizations need/face" construction that sounds like AI-generated filler rather than addressing a specific customer pain point.
+
+---
+
+### Overuse of specific terms
+
+**Issue 3:**
+"This becomes especially challenging when data is distributed across multiple Aurora clusters, making it difficult to join datasets and build cross-domain analytics workflows."
+
+**Explanation:** Uses "making it" construction which, while not on the prohibited list, follows AI-generated patterns of explaining consequences.
+
+---
+
+**Issue 4:**
+"Lakehouse architectures built on Apache Iceberg address these challenges by providing a unified data layer with ACID properties, schema evolution, and time travel capabilities."
+
+**Explanation:** Uses "providing" which is similar to the prohibited "enable/enabling" pattern - passive construction common in AI content.
+
+---
+
+**Issue 5:**
+"Amazon S3 Tables, a capability of Amazon Simple Storage Service (Amazon S3), provides purpose-built storage for Apache Iceberg tables with automatic snapshot management and compaction, making it a foundation for a governed lakehouse architecture."
+
+**Explanation:** Uses "provides" and "making it" - both passive constructions typical of AI-generated content.
+
+---
+
+**Issue 6:**
+"This architecture enables scalable analytics and lakehouse adoption while keeping transactional workloads isolated from analytics processing."
+
+**Explanation:** Uses "enables" which is on the prohibited list of overused AI-generated terms.
+
+---
+
+**Issue 7:**
+"Once data lands in S3 Tables, AWS Lake Formation provides centralized access control for the Iceberg tables, and downstream services such as Amazon Athena, Amazon Redshift, or Amazon SageMaker Unified Studio can query the tables directly."
+
+**Explanation:** Uses "provides" - passive construction common in AI content.
+
+---
+
+**Issue 8:**
+"Because S3 Tables provides automatic compaction and snapshot management for Iceberg tables, you do not need to run manual maintenance operations."
+
+**Explanation:** Uses "provides" - overused term in AI-generated content.
+
+---
+
+**Issue 9:**
+"Governed access - Lake Formation provides centralized access control over the Iceberg tables, enabling fine-grained permissions for downstream consumers."
+
+**Explanation:** Uses both "provides" and "enabling" - both on the prohibited list of overused AI-generated terms.
+
+---
+
+### Hyperbolic terminology
+
+No instances of hyperbolic terminology found.
+
+---
+
+## Important Issues (Must fix before publication)
+
+### Negative parallelism positioning
+
+No instances of negative parallelism positioning found.
+
+---
+
+### Overuse of bulleted lists
+
+**Issue 1:**
+The "Solution overview" section contains multiple bulleted lists in close succession: the six pipeline components list, the five-stage data flow list, the three Lambda operations list, and the Debezium operation codes table.
+
+**Explanation:** While technical documentation benefits from lists, this concentration of four list structures within one section disrupts narrative flow and makes the content feel like a specification document rather than a blog post that tells a story.
+
+---
+
+**Issue 2:**
+The "Conclusion" section presents eight key architectural decisions as a bulleted list rather than weaving them into a narrative summary.
+
+**Explanation:** The conclusion should synthesize the post's insights into a cohesive narrative. Using a bulleted list here makes the ending feel like a checklist rather than a compelling summary of benefits and learnings.
+
+---
+
+### Overuse of em dashes
+
+**Issue 1:**
+"Aurora PostgreSQL to Debezium - Debezium runs on MSK Connect as worker JVMs with Elastic Network Interfaces (ENIs) in your VPC."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 2:**
+"Debezium to Amazon MSK - The Debezium worker serializes each change as a JSON-encoded Kafka message and publishes it to the MSK cluster on port 9092."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 3:**
+"Amazon MSK to Amazon Data Firehose - Firehose connects to the MSK cluster using IAM access control over an AWS PrivateLink connection."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 4:**
+"Firehose to Lambda transform - For each batch of records, Firehose invokes the Lambda function synchronously."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 5:**
+"Firehose to Amazon S3 Tables - Firehose reads the otfMetadata from each transformed record and routes it to the correct Iceberg table."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 6:**
+"Decode - Extracts the base64-encoded Kafka message from the kafkaRecordValue field."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 7:**
+"Flatten and extract - Extracts the row data from the Debezium envelope."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 8:**
+"Route - Sets the `otfMetadata` block with destinationTableName (extracted from the Debezium source.table field) and operation (mapped from Debezium's single-character codes to Firehose's operation types)."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 9:**
+"Dual authentication - IAM authentication is enabled for Firehose, and unauthenticated access is kept for Debezium."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 10:**
+"VPC connectivity - Multi-VPC private connectivity with IAM is enabled so that Firehose can create an AWS PrivateLink endpoint to the MSK brokers."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 11:**
+"Topic auto-creation - A custom MSK configuration sets auto.create.topics.enable=true."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 12:**
+"Cluster resource policy - A resource-based policy grants the firehose.amazonaws.com service principal permission to call kafka:CreateVpcConnection."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 13:**
+"Single-topic routing - Using the Debezium ByLogicalTableRouter SMT to route CDC events from multiple tables through one MSK topic and one Firehose stream, reducing VPC connection costs and operational complexity."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 14:**
+"Lambda-based multi-table routing - Using otfMetadata to direct each record to the correct Iceberg table, enabling a single Firehose stream to perform inserts, updates, and deletes across multiple destination tables."
+
+**Explanation:** Em dash used as separator (also contains "enabling").
+
+---
+
+**Issue 15:**
+"Fully managed pipeline - MSK Connect runs Debezium without infrastructure management, and Firehose handles delivery with automatic retries and error handling."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 16:**
+"CDC semantics preserved - The Lambda transform maps Debezium operations to Iceberg insert, update, and delete operations, keeping the lakehouse synchronized with the source database."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 17:**
+"Private connectivity - Firehose connects to MSK via AWS PrivateLink, keeping all traffic within the AWS network."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Issue 18:**
+"Governed access - Lake Formation provides centralized access control over the Iceberg tables, enabling fine-grained permissions for downstream consumers."
+
+**Explanation:** Em dash used as separator (also contains "provides" and "enabling").
+
+---
+
+**Issue 19:**
+"Cross-domain analytics - Data from multiple isolated Aurora clusters can be unified in a single S3 Tables namespace, enabling joins and analytics across datasets that were previously siloed."
+
+**Explanation:** Em dash used as separator (also contains "enabling").
+
+---
+
+**Issue 20:**
+"Infrastructure as code - Six AWS CDK stacks deploy the core pipeline infrastructure, with Lake Formation permissions, MSK cluster policy, and Debezium connector configured through documented CLI steps."
+
+**Explanation:** Em dash used as separator.
+
+---
+
+**Total count:** 20 em dashes used throughout the post, significantly exceeding the recommended maximum of 2. This pattern is a strong indicator of AI-generated content and can erode reader trust.
+
+---
+
+## Recommended (Suggested fixes for clarity or customer benefit)
+
+### Stacked headings and overuse of headings
+
+**Issue 1:**
+The "Walkthrough" heading is immediately followed by "Step 1: Enable CDC in Aurora PostgreSQL" without any introductory body text.
+
+**Explanation:** Stacked headings break narrative flow. A brief paragraph introducing what the walkthrough covers would improve readability and set expectations.
+
+---
+
+### Repetitive language patterns
+
+**Issue 1:**
+Multiple sentences follow the pattern of "[Component] [verb] [technical detail], [gerund phrase explaining consequence]": "Debezium runs on MSK Connect as worker JVMs with Elastic Network Interfaces (ENIs) in your VPC" followed by explanation; "The Debezium worker serializes each change as a JSON-encoded Kafka message and publishes it to the MSK cluster on port 9092" followed by explanation.
+
+**Explanation:** This repetitive sentence structure throughout the data flow section indicates AI-generated patterns and reduces readability through monotonous rhythm.

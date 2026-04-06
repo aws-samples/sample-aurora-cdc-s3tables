@@ -1,0 +1,136 @@
+# Structural Analysis: Real-time CDC from Amazon Aurora PostgreSQL to Apache Iceberg tables in Amazon S3 Tables
+
+## REQUIRED (Must fix before reviews)
+
+### Reader-Focused Opening
+
+**Issue**: Opening starts with service overviews instead of customer problems
+
+**Evidence**: The first paragraph begins with "Organizations running transactional workloads on Amazon Aurora PostgreSQL-Compatible Edition (Aurora PostgreSQL) often need to..." This is good, but the second paragraph immediately pivots to service descriptions: "Lakehouse architectures built on Apache Iceberg address these challenges by providing a unified data layer with ACID properties, schema evolution, and time travel capabilities. Amazon S3 Tables, a capability of Amazon Simple Storage Service (Amazon S3), provides purpose-built storage..."
+
+The opening spends significant space explaining what services do rather than deeply exploring the customer's pain points before introducing the solution.
+
+---
+
+**Issue**: First sentence doesn't use title keywords effectively
+
+**Evidence**: The title is "Real-time CDC from Amazon Aurora PostgreSQL to Apache Iceberg tables in Amazon S3 Tables" but the first sentence reads: "Organizations running transactional workloads on Amazon Aurora PostgreSQL-Compatible Edition (Aurora PostgreSQL) often need to make operational data available for analytics without impacting production performance."
+
+While it mentions Aurora PostgreSQL, it doesn't mention CDC, Apache Iceberg, or S3 Tables in the opening sentence, missing an opportunity to immediately connect with readers searching for these specific topics.
+
+---
+
+### Problem-Solution Framework
+
+**Issue**: Missing clear explanation of why THIS solution is beneficial compared to alternatives
+
+**Evidence**: The post states "However, organizations still need a reliable way to continuously ingest operational database changes into the lakehouse while preserving transactional performance" but doesn't explain why the Debezium + MSK Connect + Firehose + S3 Tables approach is superior to other CDC methods (e.g., AWS DMS, direct Kafka consumers, other CDC tools). The benefits are listed in the Conclusion but should be previewed earlier.
+
+---
+
+### Introductory Structure
+
+**Issue**: "In this post..." statement is buried and lacks comprehensive scope
+
+**Evidence**: The "In this post" statement appears in paragraph 4: "In this post, we show you how to build a near real-time change data capture (CDC) pipeline that streams data from Aurora PostgreSQL into Apache Iceberg tables in Amazon S3 Tables using Debezium, Amazon MSK Connect, AWS Lambda, and Amazon Data Firehose."
+
+However, it doesn't set expectations about:
+- The 10-step walkthrough structure
+- The 60-70 minute deployment time
+- The infrastructure-as-code approach using CDK
+- What readers will learn beyond just building the pipeline
+
+---
+
+## IMPORTANT (Must fix before publication)
+
+### Technical Content Structure
+
+**Issue**: Prerequisites section exists but is poorly positioned and lacks detail
+
+**Evidence**: Prerequisites appear after the "Solution overview" and "Debezium event transformation" sections, under an unlabeled section that begins with "An AWS account with permissions..." This should be a clearly labeled "Prerequisites" section positioned before the walkthrough begins. Additionally, it lacks:
+- Estimated AWS costs for running the solution
+- Required IAM permissions detail
+- Estimated time to complete (60-70 minutes is mentioned later but not in prerequisites)
+- Skill level requirements (knowledge of PostgreSQL, Kafka concepts, Python for Lambda)
+
+---
+
+### Conclusion Requirements
+
+**Issue**: Missing specific next steps for extending the solution
+
+**Evidence**: The Conclusion states "We encourage you to try this solution and adapt it to your own CDC workloads" but doesn't provide concrete next steps such as:
+- How to add additional source tables
+- How to monitor the pipeline in production
+- How to handle schema evolution
+- How to scale for higher throughput
+- How to implement data quality checks
+
+---
+
+**Issue**: Insufficient calls to action and missing key documentation links
+
+**Evidence**: The Conclusion mentions "see the Amazon MSK Developer Guide, Amazon Data Firehose Developer Guide, and Amazon S3 Tables User Guide" but doesn't provide actual hyperlinks. It also doesn't link to:
+- Debezium documentation
+- AWS CDK documentation
+- Lake Formation best practices
+- Apache Iceberg documentation
+- The GitHub repository (mentioned in Step 3 but not in Conclusion)
+
+---
+
+## RECOMMENDED (Suggested fixes for clarity or customer benefit)
+
+### Title Requirements
+
+**Issue**: Title exceeds 75 characters
+
+**Evidence**: "Real-time CDC from Amazon Aurora PostgreSQL to Apache Iceberg tables in Amazon S3 Tables" = 97 characters (including spaces). This exceeds the recommended 75-character limit for optimal SEO and readability.
+
+**Suggested alternative**: "Real-time CDC from Aurora PostgreSQL to S3 Tables with Apache Iceberg" (73 characters)
+
+---
+
+**Issue**: Title includes more than 2 service names
+
+**Evidence**: The title explicitly mentions:
+1. Amazon Aurora PostgreSQL
+2. Apache Iceberg (technology, not AWS service)
+3. Amazon S3 Tables
+
+While Apache Iceberg is a technology rather than an AWS service, the title is still dense with technical terms. The post also heavily features Amazon MSK, AWS Lambda, and Amazon Data Firehose, which aren't mentioned in the title, potentially causing confusion about scope.
+
+---
+
+## ADDITIONAL OBSERVATIONS (Beyond severity categories)
+
+### Content Length Concern
+
+**Issue**: Post significantly exceeds recommended length for technical posts
+
+**Evidence**: At approximately 6,800 words, this post is 283% over the suggested 2,400-word maximum for technical posts. While comprehensive walkthroughs require detail, consider:
+- Breaking into a 2-part series (Part 1: Architecture & Setup, Part 2: Deployment & Testing)
+- Moving detailed CDK configuration to GitHub with summary in post
+- Condensing the step-by-step CLI commands with "see full commands in repository"
+
+---
+
+### Walkthrough Clarity
+
+**Issue**: Steps 2, 5, and 6 require manual CLI operations after CDK deployment, breaking the infrastructure-as-code narrative
+
+**Evidence**: 
+- Step 2: "The custom plugin and worker configuration are created via the AWS CLI because the Debezium connector JARs must be downloaded..."
+- Step 5: "This setting cannot be configured during cluster creation and must be applied as an update..."
+- Step 6: "With the MSK cluster running and Lake Formation permissions in place, create the Debezium connector using the MSK Connect API..."
+
+This creates a disjointed experience. Consider explaining upfront why these steps can't be automated, or provide a shell script that executes all post-CDK steps.
+
+---
+
+### Visual Elements
+
+**Issue**: Figures are referenced but effectiveness could be improved
+
+**Evidence**: Figures 2, 3, 4 show AWS console screenshots, but Figures 5-8 (Athena query results) would benefit from before/after comparison or highlighting changed rows to make the CDC operations more visually apparent.

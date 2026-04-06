@@ -1,0 +1,37 @@
+I've completed the validation of AWS service names in your blog post draft against the official naming guidance. Here are the violations found:
+
+## Violations Found
+
+### 1. HIGH SEVERITY - Amazon S3 Tables First Mention
+
+**Current incorrect usage:** "Amazon S3 Tables" (first mention in body text)
+
+**Correct replacement:** "Amazon S3 Tables, a capability of Amazon Simple Storage Service (Amazon S3)"
+
+**Location:** First mention in body text (likely in the introduction or architecture overview section)
+
+**Rule violated:** S3 Tables is marked as "capability of" Amazon S3 in the service registry. According to the naming guidelines, services that are capabilities of a parent service must include the full parent service name on first mention in long-form content using the pattern: "<Capability Name>, a capability of <Full Parent Service Name>"
+
+---
+
+### 2. MEDIUM SEVERITY - Deprecated Service Name Usage
+
+**Current incorrect usage:** "Amazon Kinesis Data Firehose" or "Kinesis Data Firehose"
+
+**Correct replacement:** "Amazon Data Firehose"
+
+**Location:** Multiple locations throughout the document
+
+**Rule violated:** The service has been rebranded from "Amazon Kinesis Data Firehose" to "Amazon Data Firehose". The old name should no longer be used.
+
+---
+
+## Summary
+
+**Total violations: 2 distinct issues**
+
+The most critical issue is the S3 Tables first mention, which requires the capability pattern. For subsequent mentions of S3 Tables after the first use, you can use just "S3 Tables" without the full parent service introduction.
+
+For Amazon Data Firehose, replace all instances of "Kinesis Data Firehose" or "Amazon Kinesis Data Firehose" with "Amazon Data Firehose" throughout the document.
+
+All other service names in your document (Aurora PostgreSQL, Amazon MSK, AWS Lambda, Amazon Athena, AWS Lake Formation, AWS PrivateLink, AWS CDK, etc.) appear to follow the correct naming conventions based on the guidance.

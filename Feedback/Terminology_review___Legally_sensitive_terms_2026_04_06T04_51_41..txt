@@ -1,0 +1,52 @@
+# Legal Terminology Analysis
+
+Based on my analysis of your blog post draft against the AWS Style Guide, here are the findings:
+
+---
+
+## REQUIRED (Must fix before moving forward to reviews)
+
+**Prohibited Legal Terms**
+
+1. **Complete sentence**: "Using the Debezium ByLogicalTableRouter SMT to route CDC events from all tables through one MSK topic and one Firehose stream, reducing VPC connection costs and operational complexity."
+   - **Specific term**: "all"
+   - **Recommended replacement**: Avoid using "all" due to legal implications. Consider rephrasing to "multiple tables" or "the specified tables"
+
+2. **Complete sentence**: "The ByLogicalTableRouter Single Message Transform routes CDC events from all tables into a single topic (aurora.cdc.all-tables)."
+   - **Specific term**: "all"
+   - **Recommended replacement**: Replace with "multiple tables" or "the configured tables"
+
+3. **Complete sentence**: "Deploy all six stacks with a single command."
+   - **Specific term**: "all"
+   - **Recommended replacement**: Replace with "the six stacks" or simply "six stacks"
+
+**AWS Service Reference Violations**
+- None found. The terms "ecosystem" and "platform" do not appear in this document.
+
+---
+
+## IMPORTANT (Must fix before publication)
+
+**Unverified Terms Requiring Approval**
+- The term "open source" does not appear in this document (neither hyphenated nor as two words).
+
+---
+
+## RECOMMENDED (Suggested fixes for clarity or customer benefit)
+
+No additional phrasing opportunities identified beyond the required fixes above.
+
+---
+
+## Reviewed, not found (Verified these terms aren't used in the draft)
+
+The following prohibited terms from the don't-use list were verified as **not present** in your document:
+- "ensure"
+- "any" 
+- "ecosystem"
+- "platform"
+- "open source" / "open-source"
+
+---
+
+**Summary**: The document contains 3 instances of the term "all" that should be revised before moving forward to reviews due to legal implications. All other checked terms are compliant with t

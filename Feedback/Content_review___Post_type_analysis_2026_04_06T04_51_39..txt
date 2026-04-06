@@ -1,0 +1,10 @@
+## Blog Post Evaluation
+
+### 3. Post Type Assessment
+
+- **Post type:** Technical
+- **Primary business goal(s):** 
+  - Educate readers on AWS products/services usage
+  - Increase customer awareness of AWS products, events, or content
+- **Word count:** Approximately 6,800 words vs. suggested max 2,400 words (283% over limit)
+- **Learning level:** 300-400
