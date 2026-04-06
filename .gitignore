@@ -32,3 +32,5 @@ worklog.log
 worklog.json
 worklog-git-push.json
 walkthrough.md
+*.docx
+~$*
