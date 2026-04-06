@@ -73,11 +73,13 @@ For example, the function transforms this Debezium envelope:
 }
 ```
 
-Into a flattened record with routing metadata:
+Into a response record with routing metadata:
 
 ```json
 {
-  "data": {"order_id": 1, "customer_id": 1, "total_amount": 299.99},
+  "recordId": "<original-record-id>",
+  "result": "Ok",
+  "kafkaRecordValue": "<base64-encoded flattened row JSON>",
   "metadata": {
     "otfMetadata": {
       "destinationDatabaseName": "aurora_cdc",
@@ -87,6 +89,8 @@ Into a flattened record with routing metadata:
   }
 }
 ```
+
+The `kafkaRecordValue` contains the base64-encoded flattened row data (for example, `{"order_id": 1, "customer_id": 1, "total_amount": 299.99}`), and the `otfMetadata` block tells Firehose which table to write to and which operation to perform.
 
 This routing metadata is what enables a single Firehose stream to write to multiple destination tables. For more information, see [Route incoming records to different Iceberg tables](https://docs.aws.amazon.com/firehose/latest/dev/apache-iceberg-format-input-record-different.html).
 
