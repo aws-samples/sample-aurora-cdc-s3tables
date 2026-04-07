@@ -90,7 +90,7 @@ Into a response record with routing metadata:
 
 The `kafkaRecordValue` contains the base64-encoded flattened row data (for example, `{"order_id": 1, "customer_id": 1, "total_amount": 299.99}`), and the `otfMetadata` block tells Firehose which table to write to and which operation to perform.
 
-This routing metadata is what enables a single Firehose stream to write to multiple destination tables. For more information, see [Route incoming records to different Iceberg tables](https://docs.aws.amazon.com/firehose/latest/dev/apache-iceberg-format-input-record-different.html).
+With this routing metadata, a single Firehose stream can write to multiple destination tables. For more information, see [Route incoming records to different Iceberg tables](https://docs.aws.amazon.com/firehose/latest/dev/apache-iceberg-format-input-record-different.html).
 
 ## Prerequisites
 
@@ -638,7 +638,7 @@ In this post, we showed you how to build a near real-time CDC pipeline from Auro
 - **CDC semantics preserved.** The Lambda transform maps Debezium operations to Iceberg insert, update, and delete operations, keeping the lakehouse synchronized with the source database.
 - **Private connectivity.** Firehose connects to MSK through AWS PrivateLink, keeping traffic within the AWS network.
 - **Governed access.** You can use Lake Formation to control access to the Iceberg tables with fine-grained permissions for downstream consumers.
-- **Cross-domain analytics.** Data from multiple isolated Aurora clusters can be unified in a single S3 Tables namespace, letting you join and analyze datasets that were previously siloed.
+- **Cross-domain analytics.** Data from multiple isolated Aurora clusters can be unified in a single S3 Tables namespace, so you can join and analyze datasets across domain boundaries.
 - **Infrastructure as code.** Six AWS CDK stacks deploy the core pipeline infrastructure, with Lake Formation permissions, MSK cluster policy, and Debezium connector configured through documented CLI steps.
 
 To get started, clone the [sample repository](https://github.com/aws-samples/sample-aurora-cdc-s3tables) and follow the walkthrough steps. For more information about the services used in this solution, see the [Amazon MSK Developer Guide](https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html), [Amazon Data Firehose Developer Guide](https://docs.aws.amazon.com/firehose/latest/dev/what-is-this-service.html), and [Amazon S3 Tables User Guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html).
