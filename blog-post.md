@@ -10,7 +10,7 @@ In this post, we show you how to build a CDC pipeline that streams inserts, upda
 
 The following diagram shows the architecture of the CDC pipeline.
 
-![Architecture Diagram](screenshots/aurora-cdc-s3tables-architecture.png)
+![](screenshots/aurora-cdc-s3tables-architecture.png)
 
 *Figure 1. CDC pipeline architecture from Aurora PostgreSQL to Amazon S3 Tables.*
 
@@ -287,13 +287,13 @@ The MSK cluster takes approximately 25 minutes to create. The Debezium connector
 
 After the deployment completes, you can verify the resources in the AWS console. The S3 table bucket shows the two Iceberg tables in the `aurora_cdc` namespace.
 
-![S3 Table Bucket](screenshots/aurora-cdc-table-bucket.png)
+![](screenshots/aurora-cdc-table-bucket.png)
 
 *Figure 2. S3 table bucket showing the orders and products Iceberg tables in the aurora_cdc namespace.*
 
 The Firehose delivery stream shows the MSK source, Lambda transformation, and Apache Iceberg Tables destination.
 
-![Firehose Console](screenshots/firehose-console.png)
+![](screenshots/firehose-console.png)
 
 *Figure 3. Amazon Data Firehose delivery stream with MSK source, Lambda transformation, and Apache Iceberg Tables destination.*
 
@@ -460,7 +460,7 @@ aws kafkaconnect list-connectors --region <your-region> \
 
 The connector state should show `RUNNING`, as shown in the following figure.
 
-![MSK Connect](screenshots/msk-connect.png)
+![](screenshots/msk-connect.png)
 
 *Figure 4. Debezium connector running on Amazon MSK Connect.*
 
@@ -548,11 +548,11 @@ Replace `<table-bucket-name>` with your S3 table bucket name. You should see the
 
 The following figures show the initial state of both tables as queried through Athena. At this point, the products table contains seven records and the orders table contains seven records, captured during the Debezium initial snapshot.
 
-![Products Initial](screenshots/products-initial.png)
+![](screenshots/products-initial.png)
 
 *Figure 5. Initial state of the products table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
 
-![Orders Initial](screenshots/orders-initial.png)
+![](screenshots/orders-initial.png)
 
 *Figure 6. Initial state of the orders table in Amazon Athena, showing seven records captured from Aurora PostgreSQL through the CDC pipeline.*
 
@@ -578,13 +578,13 @@ Wait for the changes to propagate through the pipeline, then query Athena again.
 
 In the products table, the Test Widget record (product_id 100) is no longer present because it was removed by the delete operation. The Ergonomic Chair row now reflects the updated price (549.99) and stock quantity (30). Two new records, Bluetooth Speaker and Standing Desk, appear with a later `created_at` timestamp, confirming they were inserted after the initial snapshot.
 
-![Products CDC](screenshots/products-cdc.png)
+![](screenshots/products-cdc.png)
 
 *Figure 7. Products table after CDC operations. The Ergonomic Chair, Headphones, and Desk Lamp rows reflect updated values. Bluetooth Speaker and Standing Desk are newly inserted records. The Test Widget record has been removed by the delete operation.*
 
 In the orders table, order 100 now shows a status of SHIPPED and order 201 shows DELIVERED, reflecting the update operations. Three new orders (301, 302, 303) appear with status NEW and a later timestamp, confirming they were inserted after the initial load.
 
-![Orders CDC](screenshots/order-cdc.png)
+![](screenshots/order-cdc.png)
 
 *Figure 8. Orders table after CDC operations. Orders 100 and 201 reflect updated status values. Orders 301, 302, and 303 are newly inserted records.*
 
