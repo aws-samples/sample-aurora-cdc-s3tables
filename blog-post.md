@@ -23,7 +23,7 @@ The pipeline uses six components:
 5. **Firehose** to deliver records from MSK to Apache Iceberg tables
 6. **S3 Tables** as the managed Iceberg destination with automatic compaction and snapshot management
 
-A key design decision is the single-topic routing pattern. Firehose supports only one MSK topic per delivery stream. Without routing, each source table would need its own Firehose stream and [VPC connection](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html). Instead, you use a Debezium [Single Message Transform](https://debezium.io/documentation/reference/stable/transformations/topic-routing.html) (SMT) to route changes from the monitored tables into a single MSK topic, and the Lambda function directs each record to the correct Iceberg table. This approach uses one Firehose stream for multiple tables, reducing cost and operational complexity.
+A key design decision is the single-topic routing pattern. Firehose supports only one MSK topic per delivery stream, so each source table would otherwise need its own Firehose stream and [VPC connection](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html). Instead, you use a Debezium [Single Message Transform](https://debezium.io/documentation/reference/stable/transformations/topic-routing.html) (SMT) to route changes from the monitored tables into a single MSK topic, and the Lambda function directs each record to the correct Iceberg table. This approach uses one Firehose stream for multiple tables, reducing cost and operational complexity.
 
 The data flows through five stages:
 
@@ -207,7 +207,7 @@ key.converter.schemas.enable=false
 value.converter.schemas.enable=false' | base64)"
 ```
 
-Note the `customPluginArn` and `workerConfigurationArn` from the output - you need these for the CDK configuration in the next step.
+Note the `customPluginArn` and `workerConfigurationArn` from the output. You need these for the CDK configuration in the next step.
 
 > **Note:** The custom plugin and worker configuration are created via the AWS CLI because the Debezium connector JARs must be downloaded from the [Debezium project](https://debezium.io/releases/) and packaged manually. The remaining infrastructure is deployed using the AWS CDK in the following steps.
 
@@ -303,7 +303,7 @@ The MSK cluster requires specific configuration to support both the Debezium con
 
 - **Dual authentication.** [IAM authentication](https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html) is enabled for Firehose, and unauthenticated access is kept for Debezium. MSK Connect workers use the PLAINTEXT protocol to communicate with brokers, as documented in the [MSK Connect getting started tutorial](https://docs.aws.amazon.com/msk/latest/developerguide/mkc-tutorial-setup.html). This requires the cluster encryption setting `TLS_PLAINTEXT`, which supports both TLS (for Firehose via IAM) and PLAINTEXT (for MSK Connect).
 - **VPC connectivity.** [Multi-VPC private connectivity](https://docs.aws.amazon.com/msk/latest/developerguide/aws-access-mult-vpc.html) with IAM is enabled so that Firehose can create an AWS PrivateLink endpoint to the MSK brokers.
-- **Topic auto-creation.** A custom MSK configuration sets `auto.create.topics.enable=true`. Without this, Debezium fails with `UNKNOWN_TOPIC_OR_PARTITION` errors because the target topics do not exist when the connector first starts.
+- **Topic auto-creation.** A custom MSK configuration sets `auto.create.topics.enable=true`, which Debezium requires to create topics on first connect. If this setting is disabled, Debezium fails with `UNKNOWN_TOPIC_OR_PARTITION` errors because the target topics do not exist when the connector first starts.
 - **Cluster resource policy.** A [resource-based policy](https://docs.aws.amazon.com/firehose/latest/dev/writing-with-msk.html) grants the `firehose.amazonaws.com` service principal permission to call `kafka:CreateVpcConnection`.
 
 ### Step 5: Enable MSK VPC connectivity, grant Lake Formation permissions, and apply MSK cluster policy
@@ -529,7 +529,7 @@ aws cloudwatch get-metric-statistics \
   --region <your-region>
 ```
 
-You should see a `Sum` value of 6 or more. If the value is 0, wait another minute and retry - there can be a short delay between MSK topic delivery and Firehose metric reporting.
+You should see a `Sum` value of 6 or more. If the value is 0, wait another minute and retry. There can be a short delay between MSK topic delivery and Firehose metric reporting.
 
 If records are not appearing, check the Firehose error output in the backup S3 bucket and the Lambda function's CloudWatch Logs for transformation errors.
 
@@ -576,7 +576,7 @@ DELETE FROM public.products WHERE product_name = 'Test Widget';
 
 Wait for the changes to propagate through the pipeline, then query Athena again. The following figures show the results after the insert, update, and delete operations have been applied.
 
-In the products table, the Test Widget record (product_id 100) is no longer present - it was removed by the delete operation. The Ergonomic Chair row now reflects the updated price (549.99) and stock quantity (30). Two new records, Bluetooth Speaker and Standing Desk, appear with a later `created_at` timestamp, confirming they were inserted after the initial snapshot.
+In the products table, the Test Widget record (product_id 100) is no longer present because it was removed by the delete operation. The Ergonomic Chair row now reflects the updated price (549.99) and stock quantity (30). Two new records, Bluetooth Speaker and Standing Desk, appear with a later `created_at` timestamp, confirming they were inserted after the initial snapshot.
 
 ![Products CDC](screenshots/products-cdc.png)
 
@@ -626,7 +626,7 @@ SELECT pg_drop_replication_slot('debezium_slot');
 DROP PUBLICATION dbz_publication;
 ```
 
-> **Important:** The replication slot (`debezium_slot`) was created automatically by Debezium. If you plan to redeploy the pipeline later, you do not need to drop the slot and publication. However, the replication slot continues to retain WAL segments while the connector is not running, which can increase storage usage on the Aurora cluster. The MSK cluster is the largest cost component of this solution and cannot be paused - it can only be deleted and recreated.
+> **Important:** The replication slot (`debezium_slot`) was created automatically by Debezium. If you plan to redeploy the pipeline later, you do not need to drop the slot and publication. However, the replication slot continues to retain WAL segments while the connector is not running, which can increase storage usage on the Aurora cluster. The MSK cluster is the largest cost component of this solution and cannot be paused. It can only be deleted and recreated.
 
 ## Conclusion
 
